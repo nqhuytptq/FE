@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="..\build\DebtManagement.Api.props" />
+</Project>

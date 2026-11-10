@@ -1,0 +1,17 @@
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\bin\Debug\net8.0\DebtManagement.Infrastructure.deps.json
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\bin\Debug\net8.0\DebtManagement.Infrastructure.dll
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\bin\Debug\net8.0\DebtManagement.Infrastructure.pdb
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\bin\Debug\net8.0\DebtManagement.Application.dll
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\bin\Debug\net8.0\DebtManagement.Domain.dll
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\bin\Debug\net8.0\DebtManagement.Application.pdb
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\bin\Debug\net8.0\DebtManagement.Domain.pdb
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\obj\Debug\net8.0\DebtManagement.Infrastructure.csproj.AssemblyReference.cache
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\obj\Debug\net8.0\DebtManagement.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\obj\Debug\net8.0\DebtManagement.Infrastructure.AssemblyInfoInputs.cache
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\obj\Debug\net8.0\DebtManagement.Infrastructure.AssemblyInfo.cs
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\obj\Debug\net8.0\DebtManagement.Infrastructure.csproj.CoreCompileInputs.cache
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\obj\Debug\net8.0\DebtMana.419D9AB4.Up2Date
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\obj\Debug\net8.0\DebtManagement.Infrastructure.dll
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\obj\Debug\net8.0\refint\DebtManagement.Infrastructure.dll
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\obj\Debug\net8.0\DebtManagement.Infrastructure.pdb
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\obj\Debug\net8.0\ref\DebtManagement.Infrastructure.dll
