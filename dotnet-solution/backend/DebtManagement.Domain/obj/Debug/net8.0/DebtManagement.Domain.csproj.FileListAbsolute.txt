@@ -9,3 +9,4 @@ D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\obj\De
 D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\obj\Debug\net8.0\refint\DebtManagement.Domain.dll
 D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\obj\Debug\net8.0\DebtManagement.Domain.pdb
 D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\obj\Debug\net8.0\ref\DebtManagement.Domain.dll
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\obj\Debug\net8.0\DebtManagement.Domain.sourcelink.json

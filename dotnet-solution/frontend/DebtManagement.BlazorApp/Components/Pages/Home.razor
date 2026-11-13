@@ -1,0 +1,189 @@
+﻿@page "/"
+@inject BlazorSession Session
+@inject IDebtDocumentService DocService
+@inject IUserService UserService
+
+<PageTitle>VCB Quản lý hồ sơ</PageTitle>
+
+@if (!Session.IsAuthenticated)
+{
+    <div class="container mt-5"><div class="row justify-content-center"><div class="col-md-5 card p-4 shadow">
+        <h3 class="text-primary mb-3">Đăng nhập VCB</h3>
+        <input class="form-control mb-2" @bind="email" placeholder="Email" />
+        <input type="password" class="form-control mb-3" @bind="password" placeholder="Mật khẩu" />
+        @if (loginError != null) { <div class="alert alert-danger">@loginError</div> }
+        <button class="btn btn-primary w-100" @onclick="LoginAsync">Đăng nhập</button>
+    </div></div></div>
+}
+else
+{
+    <div class="d-flex justify-content-between mb-3">
+        <div><h4 class="text-primary mb-0">Quản lý hồ sơ văn bản nợ</h4><small class="text-muted">@Session.CurrentUser?.Name | @Session.CurrentUser?.DepartmentCode | @Session.CurrentUser?.Role</small></div>
+        <div class="d-flex gap-2">
+            @if (Session.CurrentUser?.Role == "admin") { <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleUsers">@(showUsers ? "Hồ sơ" : "Người dùng")</button> }
+            <button class="btn btn-sm btn-outline-danger" @onclick="Logout">Đăng xuất</button>
+        </div>
+    </div>
+
+    @if (showUsers)
+    {
+        <div class="card mb-3"><div class="card-header fw-bold">Quản lý người dùng</div>
+        <table class="table mb-0"><thead><tr><th>Tên</th><th>Email</th><th>Phòng</th><th>Role</th><th>Hoạt động</th></tr></thead><tbody>
+        @foreach (var u in allUsers) { <tr><td>@u.Name</td><td>@u.Email</td><td>@u.DepartmentName</td><td>@u.Role</td><td>@(u.IsActive ? "✅" : "❌")</td></tr> }
+        </tbody></table></div>
+    }
+    else
+    {
+        @* === Form tạo hồ sơ mới (NV PKH) === *@
+        @if (Session.CurrentUser?.DepartmentCode == "PKH" && Session.CurrentUser?.Role == "staff")
+        {
+            <div class="card mb-3 border-primary"><div class="card-header text-primary fw-bold">Tạo hồ sơ mới</div><div class="card-body">
+                @if (createError != null) { <div class="alert alert-danger">@createError</div> }
+                <div class="row g-2 mb-2">
+                    <div class="col-md-4"><input class="form-control" @bind="newName" placeholder="Tên khách hàng" /></div>
+                    <div class="col-md-3"><input class="form-control" @bind="newPhone" placeholder="SĐT" /></div>
+                    <div class="col-md-2"><input class="form-control" @bind="newIssue" placeholder="Ngày PS (yyyy-MM-dd)" /></div>
+                    <div class="col-md-3"><input class="form-control" @bind="newDue" placeholder="Hạn TT (yyyy-MM-dd)" /></div>
+                </div>
+                <div class="form-check mb-2"><input class="form-check-input" type="checkbox" @bind="newHasDebt" id="hd" /><label class="form-check-label" for="hd">Có chứng từ nợ</label></div>
+                @if (newHasDebt) { @foreach (var it in newItems) { <div class="input-group mb-1"><input class="form-control" @bind="it.ItemName" placeholder="Tên CT nợ" /><button class="btn btn-outline-danger" @onclick="() => newItems.Remove(it)">X</button></div> } <button class="btn btn-sm btn-outline-primary" @onclick="() => newItems.Add(new CreateDebtItemRequest())">+ Thêm CT</button> }
+                <div class="mt-2"><button class="btn btn-primary" @onclick="CreateDoc">Tạo hồ sơ</button></div>
+            </div></div>
+        }
+
+        @* === Chi tiết hồ sơ === *@
+        @if (selected != null)
+        {
+            <div class="card border-primary mb-3">
+                <div class="card-header bg-primary text-white d-flex justify-content-between"><span>@selected.DocumentNumber</span><button class="btn btn-sm btn-light" @onclick="Close">Đóng</button></div>
+                <div class="card-body">
+                    <div class="row mb-2"><div class="col-md-4"><b>KH:</b> @selected.CustomerName</div><div class="col-md-4"><b>Phòng:</b> @selected.CurrentDepartmentName</div><div class="col-md-4"><b>Trạng thái:</b> <span class="badge bg-info text-dark">@selected.Status</span></div></div>
+
+                    @* Chứng từ nợ theo phòng *@
+                    <h6 class="mt-2">Chứng từ nợ PKH</h6>
+                    @foreach (var it in selected.DebtItems.Where(x => (x.SourceDepartmentCode ?? "PKH") == "PKH")) { <div class="d-flex justify-content-between border rounded p-1 mb-1 bg-light"><span>@it.ItemName</span><span class="badge @(it.IsSupplemented?"bg-success":"bg-warning text-dark")">@(it.IsSupplemented?"Đã bổ sung":"Chưa")</span></div> }
+                    <h6 class="mt-2">Chứng từ nợ PQLN</h6>
+                    @foreach (var it in selected.DebtItems.Where(x => x.SourceDepartmentCode == "PQLN")) { <div class="d-flex justify-content-between border rounded p-1 mb-1 bg-light"><span>@it.ItemName</span><span class="badge @(it.IsSupplemented?"bg-success":"bg-warning text-dark")">@(it.IsSupplemented?"Đã bổ sung":"Chưa")</span></div> }
+
+                    @* NV PQLN thêm chứng từ *@
+                    @if (Session.CurrentUser?.DepartmentCode == "PQLN" && selected.PqlnReceiverId == Session.CurrentUser?.Id)
+                    {
+                        <div class="input-group mt-2"><input class="form-control" @bind="addItemName" placeholder="Tên CT nợ bổ sung" /><button class="btn btn-outline-indigo" @onclick="AddPqlnItem">+ Thêm CT PQLN</button></div>
+                    }
+
+                    @* Bổ sung chứng từ *@
+                    @if (CanSupplement && selected.DebtItems.Any(x => !x.IsSupplemented))
+                    {
+                        <div class="mt-2">
+                            @foreach (var it in selected.DebtItems.Where(x => !x.IsSupplemented))
+                            {
+                                <div class="form-check"><input class="form-check-input" type="checkbox" checked="@suppIds.Contains(it.Id)" @onchange="(e) => ToggleSupp(it.Id, (bool)(e.Value ?? false))" /><label class="form-check-label">@it.ItemName</label></div>
+                            }
+                            <button class="btn btn-sm btn-success mt-1" @onclick="SupplementItems" disabled="@(suppIds.Count==0)">Bổ sung @suppIds.Count chứng từ</button>
+                        </div>
+                    }
+
+                    <h6 class="mt-3">Luồng theo dõi</h6>
+                    <div class="border p-2" style="max-height:220px;overflow:auto">@foreach (var h in selected.CirculationHistory) { <div class="small border-bottom py-1"><b>@h.Action</b> @h.CreatedAt.ToString("dd/MM/yyyy HH:mm:ss") - @h.PerformedByUserName | @h.FromDepartmentName → @h.ToDepartmentName<br/>@h.Notes</div> }</div>
+
+                    @* Workflow *@
+                    <div class="d-flex flex-wrap gap-2 mt-3">
+                        @if (CanApprovePkh) { <button class="btn btn-success" @onclick="ApprovePkh">Duyệt PKH</button> }
+                        @if (CanReceivePqln) { <button class="btn btn-primary" @onclick="ReceivePqln">Tiếp nhận PQLN</button> }
+                        @if (CanSubmitPqln) { <button class="btn btn-primary" @onclick="SubmitPqln">Đẩy SUP PQLN</button> }
+                        @if (CanApprovePqln) { <button class="btn btn-success" @onclick="ApprovePqln">Duyệt PQLN</button> }
+                        @if (CanReceivePdv) { <button class="btn btn-primary" @onclick="ReceivePdv">Tiếp nhận PDV</button> }
+                        @if (CanPostEntry) { <button class="btn btn-warning" @onclick="PostEntry">Đi bút toán</button> }
+                        @if (CanApprovePdv) { <button class="btn btn-success" @onclick="ApprovePdv">Duyệt hoàn tất</button> }
+                    </div>
+                    @if (actionMessage != null) { <div class="alert alert-info mt-2 py-1">@actionMessage</div> }
+                </div>
+            </div>
+        }
+
+        @* === Bộ lọc + tìm kiếm === *@
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <b>Danh sách hồ sơ (@filtered.Count)</b>
+                <div class="d-flex gap-2">
+                    <input class="form-control form-control-sm" style="width:200px" @bind="searchText" @bind:event="oninput" placeholder="Tìm số VB / khách hàng..." />
+                    <select class="form-select form-select-sm" style="width:150px" @bind="filterStatus"><option value="">Tất cả</option><option value="pending">Chờ duyệt</option><option value="processing">Đang xử lý</option><option value="completed">Hoàn thành</option></select>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="LoadAsync">Làm mới</button>
+                </div>
+            </div>
+            <table class="table table-hover table-sm mb-0"><thead><tr><th>Số VB</th><th>Khách hàng</th><th>Phòng</th><th>Trạng thái</th><th>CT nợ</th><th></th></tr></thead>
+            <tbody>@if (filtered.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-3">Không có hồ sơ nào.</td></tr> } @foreach (var d in filtered) { <tr><td><b>@d.DocumentNumber</b></td><td>@d.CustomerName</td><td><span class="badge bg-secondary">@d.CurrentDepartmentCode</span></td><td><span class="badge bg-primary">@StatusLabel(d.Status)</span></td><td>@d.TotalDebtItems</td><td><button class="btn btn-sm btn-outline-primary" @onclick="() => ViewAsync(d.Id)">Xem</button></td></tr> }</tbody></table>
+        </div>
+    }
+}
+
+@code {
+    string email="",password=""; string? loginError; string? createError; string? actionMessage;
+    List<DebtDocumentDto> docs=new(); DebtDocumentDetailDto? selected; List<AppUserDto> allUsers=new();
+    bool showUsers; string searchText=""; string filterStatus="";
+    string newName="",newPhone="",newIssue=DateTime.Today.ToString("yyyy-MM-dd"),newDue=DateTime.Today.AddDays(30).ToString("yyyy-MM-dd"); bool newHasDebt; List<CreateDebtItemRequest> newItems=new();
+    string addItemName=""; HashSet<Guid> suppIds=new();
+
+    string Dept => Session.CurrentUser?.DepartmentCode ?? "";
+    string St => selected?.Status ?? "";
+    bool R(string r) => Session.CurrentUser?.Role == r;
+    bool CanApprovePkh => selected!=null&&Dept=="PKH"&&R("manager")&&St=="PkhPendingSup";
+    bool CanReceivePqln => selected!=null&&Dept=="PQLN"&&R("staff")&&St=="PqlnPendingReceive";
+    bool CanSubmitPqln => selected!=null&&Dept=="PQLN"&&R("staff")&&St=="PqlnReceived"&&selected.PqlnReceiverId==Session.CurrentUser?.Id;
+    bool CanApprovePqln => selected!=null&&Dept=="PQLN"&&R("manager")&&St=="PqlnPendingSup";
+    bool CanReceivePdv => selected!=null&&Dept=="PDV"&&R("staff")&&St=="PdvPendingReceive";
+    bool CanPostEntry => selected!=null&&Dept=="PDV"&&R("staff")&&St=="PdvReceived"&&selected.PdvReceiverId==Session.CurrentUser?.Id;
+    bool CanApprovePdv => selected!=null&&Dept=="PDV"&&R("manager")&&(St=="PdvEntryPosted"||St=="PdvEntryApproved");
+    bool CanSupplement => selected!=null&&Session.CurrentUser!=null&&((Dept=="PKH"&&selected.CreatedByUserId==Session.CurrentUser.Id)||(Dept=="PQLN"&&selected.PqlnReceiverId==Session.CurrentUser.Id));
+
+    List<DebtDocumentDto> filtered => docs.Where(d => {
+        if (!string.IsNullOrEmpty(searchText)) { var q=searchText.ToLower(); if (!d.DocumentNumber.ToLower().Contains(q)&&!d.CustomerName.ToLower().Contains(q)) return false; }
+        if (filterStatus=="pending") return new[]{"PkhPendingSup","PqlnPendingReceive","PqlnPendingSup","PdvPendingReceive"}.Contains(d.Status);
+        if (filterStatus=="processing") return new[]{"PqlnReceived","PdvReceived","PdvEntryPosted","PdvEntryApproved"}.Contains(d.Status);
+        if (filterStatus=="completed") return d.Status=="Completed";
+        return true;
+    }).ToList();
+
+    string StatusLabel(string s) => s switch { "PkhPendingSup"=>"Chờ SUP PKH", "PqlnPendingReceive"=>"Chờ PQLN", "PqlnReceived"=>"PQLN nhận", "PqlnPendingSup"=>"Chờ SUP PQLN", "PdvPendingReceive"=>"Chờ PDV", "PdvReceived"=>"PDV nhận", "PdvEntryPosted"=>"Đã bút toán", "PdvEntryApproved"=>"Duyệt BT", "Completed"=>"HOÀN TẤT", _ => s };
+
+    protected override async Task OnInitializedAsync() { if (Session.IsAuthenticated) await LoadAsync(); }
+    async Task LoginAsync() { loginError=await Session.LoginAsync(email,password); if (loginError==null) await LoadAsync(); }
+    void Logout() { Session.Logout(); docs.Clear(); selected=null; }
+    async Task LoadAsync() { if (Session.CurrentUser!=null) docs=(await DocService.GetAllAsync(null,null,null,Session.CurrentUser.Id)).ToList(); }
+    async Task ViewAsync(Guid id) { suppIds.Clear(); actionMessage=null; if (Session.CurrentUser!=null) selected=await DocService.GetByIdAsync(id,Session.CurrentUser.Id); }
+    void Close() => selected=null;
+    async Task ToggleUsers() { showUsers=!showUsers; if (showUsers) allUsers=(await UserService.GetAllAsync()).ToList(); }
+
+    async Task CreateDoc()
+    {
+        if (string.IsNullOrWhiteSpace(newName)) { createError="Nhập tên KH"; return; }
+        try { await DocService.CreateAsync(new CreateDebtDocumentRequest{CustomerName=newName,CustomerPhone=newPhone,CustomerType="company",IssueDate=newIssue,DueDate=newDue,Priority="normal",HasDebtDocuments=newHasDebt,DebtItems=newItems},Session.CurrentUser!.Id); newName="";newPhone="";newItems.Clear();newHasDebt=false;createError=null; await LoadAsync(); }
+        catch (Exception e) { createError=e.Message; }
+    }
+
+    async Task AddPqlnItem()
+    {
+        if (selected==null||string.IsNullOrWhiteSpace(addItemName)) return;
+        try { await DocService.AddDebtItemsAsync(selected.Id,new AddDebtItemsRequest(new List<CreateDebtItemRequest>{ new CreateDebtItemRequest { ItemName = addItemName } }, "PQLN Blazor"),Session.CurrentUser!.Id); addItemName=""; await ViewAsync(selected.Id); }
+        catch (Exception e) { actionMessage=e.Message; }
+    }
+
+    void ToggleSupp(Guid id, bool check) { if (check) suppIds.Add(id); else suppIds.Remove(id); }
+    async Task SupplementItems()
+    {
+        if (selected==null||suppIds.Count==0) return;
+        try { await DocService.SupplementItemsAsync(selected.Id,new SupplementItemsRequest(suppIds.ToList(),"Bổ sung Blazor"),Session.CurrentUser!.Id); suppIds.Clear(); await ViewAsync(selected.Id); await LoadAsync(); actionMessage="Bổ sung thành công"; }
+        catch (Exception e) { actionMessage=e.Message; }
+    }
+
+    async Task Act(Func<Task> f) { try { await f(); actionMessage="Thành công"; await LoadAsync(); if (selected!=null) await ViewAsync(selected.Id); } catch (Exception e) { actionMessage=e.Message; } }
+    Task ApprovePkh()=>Act(()=>DocService.PkhSupApproveAsync(selected!.Id,"Duyệt Blazor",Session.CurrentUser!.Id));
+    Task ReceivePqln()=>Act(()=>DocService.PqlnTakeOwnershipAsync(selected!.Id,Session.CurrentUser!.Id));
+    Task SubmitPqln()=>Act(()=>DocService.PqlnSubmitSupAsync(selected!.Id,"Đẩy SUP Blazor",Session.CurrentUser!.Id));
+    Task ApprovePqln()=>Act(()=>DocService.PqlnSupApproveAsync(selected!.Id,"Duyệt Blazor",Session.CurrentUser!.Id));
+    Task ReceivePdv()=>Act(()=>DocService.PdvTakeOwnershipAsync(selected!.Id,Session.CurrentUser!.Id));
+    Task PostEntry()=>Act(()=>DocService.PdvPostEntryAsync(selected!.Id,"Bút toán Blazor",Session.CurrentUser!.Id));
+    Task ApprovePdv()=>Act(()=>DocService.PdvSupApproveAsync(selected!.Id,"Hoàn tất Blazor",Session.CurrentUser!.Id));
+}
+
+

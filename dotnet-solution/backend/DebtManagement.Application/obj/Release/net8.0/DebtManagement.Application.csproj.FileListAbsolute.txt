@@ -1,0 +1,16 @@
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\bin\Release\net8.0\DebtManagement.Application.deps.json
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\bin\Release\net8.0\DebtManagement.Application.dll
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\bin\Release\net8.0\DebtManagement.Application.pdb
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\bin\Release\net8.0\DebtManagement.Domain.dll
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\bin\Release\net8.0\DebtManagement.Domain.pdb
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\obj\Release\net8.0\DebtManagement.Application.csproj.AssemblyReference.cache
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\obj\Release\net8.0\DebtManagement.Application.GeneratedMSBuildEditorConfig.editorconfig
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\obj\Release\net8.0\DebtManagement.Application.AssemblyInfoInputs.cache
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\obj\Release\net8.0\DebtManagement.Application.AssemblyInfo.cs
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\obj\Release\net8.0\DebtManagement.Application.csproj.CoreCompileInputs.cache
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\obj\Release\net8.0\DebtManagement.Application.sourcelink.json
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\obj\Release\net8.0\DebtMana.412BF515.Up2Date
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\obj\Release\net8.0\DebtManagement.Application.dll
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\obj\Release\net8.0\refint\DebtManagement.Application.dll
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\obj\Release\net8.0\DebtManagement.Application.pdb
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Application\obj\Release\net8.0\ref\DebtManagement.Application.dll

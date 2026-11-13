@@ -122,3 +122,4 @@ D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Api\obj\Debug
 D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Api\obj\Debug\net8.0\DebtManagement.Api.pdb
 D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Api\obj\Debug\net8.0\DebtManagement.Api.genruntimeconfig.cache
 D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Api\obj\Debug\net8.0\ref\DebtManagement.Api.dll
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Api\obj\Debug\net8.0\DebtManagement.Api.sourcelink.json

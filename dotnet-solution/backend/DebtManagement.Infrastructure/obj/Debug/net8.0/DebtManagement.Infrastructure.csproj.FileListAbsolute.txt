@@ -15,3 +15,4 @@ D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructur
 D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\obj\Debug\net8.0\refint\DebtManagement.Infrastructure.dll
 D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\obj\Debug\net8.0\DebtManagement.Infrastructure.pdb
 D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\obj\Debug\net8.0\ref\DebtManagement.Infrastructure.dll
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Infrastructure\obj\Debug\net8.0\DebtManagement.Infrastructure.sourcelink.json

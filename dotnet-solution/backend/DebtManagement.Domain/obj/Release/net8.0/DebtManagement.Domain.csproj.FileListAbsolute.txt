@@ -1,0 +1,12 @@
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\bin\Release\net8.0\DebtManagement.Domain.deps.json
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\bin\Release\net8.0\DebtManagement.Domain.dll
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\bin\Release\net8.0\DebtManagement.Domain.pdb
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\obj\Release\net8.0\DebtManagement.Domain.GeneratedMSBuildEditorConfig.editorconfig
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\obj\Release\net8.0\DebtManagement.Domain.AssemblyInfoInputs.cache
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\obj\Release\net8.0\DebtManagement.Domain.AssemblyInfo.cs
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\obj\Release\net8.0\DebtManagement.Domain.csproj.CoreCompileInputs.cache
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\obj\Release\net8.0\DebtManagement.Domain.sourcelink.json
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\obj\Release\net8.0\DebtManagement.Domain.dll
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\obj\Release\net8.0\refint\DebtManagement.Domain.dll
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\obj\Release\net8.0\DebtManagement.Domain.pdb
+D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Domain\obj\Release\net8.0\ref\DebtManagement.Domain.dll
