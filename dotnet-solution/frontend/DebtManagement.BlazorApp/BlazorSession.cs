@@ -1,12 +1,34 @@
-﻿using DebtManagement.Application.DTOs;
+﻿using System.Text.Json;
+using DebtManagement.Application.DTOs;
 using DebtManagement.Application.Interfaces;
+using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 
 namespace DebtManagement.BlazorApp;
 
-public sealed class BlazorSession(IAuthService authService)
+public sealed class BlazorSession(IAuthService authService, ProtectedLocalStorage storage)
 {
+    private const string StorageKey = "vcb-current-user";
     public AppUserDto? CurrentUser { get; private set; }
+    public bool IsInitialized { get; private set; }
     public bool IsAuthenticated => CurrentUser != null;
+
+    public async Task InitializeAsync()
+    {
+        if (IsInitialized) return;
+        try
+        {
+            var stored = await storage.GetAsync<AppUserDto>(StorageKey);
+            if (stored.Success) CurrentUser = stored.Value;
+        }
+        catch
+        {
+            CurrentUser = null;
+        }
+        finally
+        {
+            IsInitialized = true;
+        }
+    }
 
     public async Task<string?> LoginAsync(string email, string password)
     {
@@ -14,6 +36,8 @@ public sealed class BlazorSession(IAuthService authService)
         {
             var result = await authService.LoginAsync(email, password);
             CurrentUser = result?.User;
+            if (CurrentUser != null)
+                await storage.SetAsync(StorageKey, CurrentUser);
             return result == null ? "Email hoặc mật khẩu không đúng" : null;
         }
         catch (Exception ex)
@@ -23,5 +47,9 @@ public sealed class BlazorSession(IAuthService authService)
         }
     }
 
-    public void Logout() => CurrentUser = null;
+    public async Task LogoutAsync()
+    {
+        CurrentUser = null;
+        try { await storage.DeleteAsync(StorageKey); } catch { }
+    }
 }

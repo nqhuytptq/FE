@@ -5,7 +5,11 @@
 
 <PageTitle>VCB Quản lý hồ sơ</PageTitle>
 
-@if (!Session.IsAuthenticated)
+@if (!Session.IsInitialized)
+{
+    <div class="d-flex justify-content-center align-items-center min-vh-50"><span class="spinner-border text-primary"></span></div>
+}
+else if (!Session.IsAuthenticated)
 {
     <div class="container mt-5"><div class="row justify-content-center"><div class="col-md-5 card p-4 shadow">
         <h3 class="text-primary mb-3">Đăng nhập VCB</h3>
@@ -146,9 +150,9 @@ else
 
     string StatusLabel(string s) => s switch { "PkhPendingSup"=>"Chờ SUP PKH", "PqlnPendingReceive"=>"Chờ PQLN", "PqlnReceived"=>"PQLN nhận", "PqlnPendingSup"=>"Chờ SUP PQLN", "PdvPendingReceive"=>"Chờ PDV", "PdvReceived"=>"PDV nhận", "PdvEntryPosted"=>"Đã bút toán", "PdvEntryApproved"=>"Duyệt BT", "Completed"=>"HOÀN TẤT", _ => s };
 
-    protected override async Task OnInitializedAsync() { if (Session.IsAuthenticated) await LoadAsync(); }
+    protected override async Task OnInitializedAsync() { await Session.InitializeAsync(); if (Session.IsAuthenticated) await LoadAsync(); }
     async Task LoginAsync() { loginError=await Session.LoginAsync(email,password); if (loginError==null) await LoadAsync(); }
-    void Logout() { Session.Logout(); docs.Clear(); selected=null; }
+    async Task Logout() { await Session.LogoutAsync(); docs.Clear(); selected=null; }
     async Task LoadAsync() { if (Session.CurrentUser!=null) docs=(await DocService.GetAllAsync(null,null,null,Session.CurrentUser.Id)).ToList(); }
     async Task ViewAsync(Guid id) { suppIds.Clear(); actionMessage=null; if (Session.CurrentUser!=null) selected=await DocService.GetByIdAsync(id,Session.CurrentUser.Id); }
     void Close() => selected=null;
@@ -185,5 +189,7 @@ else
     Task PostEntry()=>Act(()=>DocService.PdvPostEntryAsync(selected!.Id,"Bút toán Blazor",Session.CurrentUser!.Id));
     Task ApprovePdv()=>Act(()=>DocService.PdvSupApproveAsync(selected!.Id,"Hoàn tất Blazor",Session.CurrentUser!.Id));
 }
+
+
 
 
