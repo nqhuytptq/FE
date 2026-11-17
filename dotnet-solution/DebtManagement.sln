@@ -1,0 +1,57 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "backend", "backend", "{7F5F1958-D764-4B7D-B3D9-EBE28397773B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DebtManagement.Domain", "backend\DebtManagement.Domain\DebtManagement.Domain.csproj", "{D5E049B0-170C-46A0-82FE-D1C2527E086E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DebtManagement.Application", "backend\DebtManagement.Application\DebtManagement.Application.csproj", "{43C94A4A-58C1-482B-A276-76EB20B9D83A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DebtManagement.Infrastructure", "backend\DebtManagement.Infrastructure\DebtManagement.Infrastructure.csproj", "{3FA28389-F5AB-4CEF-856A-421A555AA3EC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DebtManagement.Api", "backend\DebtManagement.Api\DebtManagement.Api.csproj", "{836699F5-D1D1-423A-9ECF-F417686CE8C0}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "frontend", "frontend", "{0291D603-1EF4-4826-A868-421B15E35A39}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DebtManagement.BlazorApp", "frontend\DebtManagement.BlazorApp\DebtManagement.BlazorApp.csproj", "{76E7F9F0-E61B-400F-81C9-228E5017FBFC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D5E049B0-170C-46A0-82FE-D1C2527E086E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D5E049B0-170C-46A0-82FE-D1C2527E086E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D5E049B0-170C-46A0-82FE-D1C2527E086E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D5E049B0-170C-46A0-82FE-D1C2527E086E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{43C94A4A-58C1-482B-A276-76EB20B9D83A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{43C94A4A-58C1-482B-A276-76EB20B9D83A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{43C94A4A-58C1-482B-A276-76EB20B9D83A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{43C94A4A-58C1-482B-A276-76EB20B9D83A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3FA28389-F5AB-4CEF-856A-421A555AA3EC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3FA28389-F5AB-4CEF-856A-421A555AA3EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3FA28389-F5AB-4CEF-856A-421A555AA3EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3FA28389-F5AB-4CEF-856A-421A555AA3EC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{836699F5-D1D1-423A-9ECF-F417686CE8C0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{836699F5-D1D1-423A-9ECF-F417686CE8C0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{836699F5-D1D1-423A-9ECF-F417686CE8C0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{836699F5-D1D1-423A-9ECF-F417686CE8C0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{76E7F9F0-E61B-400F-81C9-228E5017FBFC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{76E7F9F0-E61B-400F-81C9-228E5017FBFC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{76E7F9F0-E61B-400F-81C9-228E5017FBFC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{76E7F9F0-E61B-400F-81C9-228E5017FBFC}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{D5E049B0-170C-46A0-82FE-D1C2527E086E} = {7F5F1958-D764-4B7D-B3D9-EBE28397773B}
+		{43C94A4A-58C1-482B-A276-76EB20B9D83A} = {7F5F1958-D764-4B7D-B3D9-EBE28397773B}
+		{3FA28389-F5AB-4CEF-856A-421A555AA3EC} = {7F5F1958-D764-4B7D-B3D9-EBE28397773B}
+		{836699F5-D1D1-423A-9ECF-F417686CE8C0} = {7F5F1958-D764-4B7D-B3D9-EBE28397773B}
+		{76E7F9F0-E61B-400F-81C9-228E5017FBFC} = {0291D603-1EF4-4826-A868-421B15E35A39}
+	EndGlobalSection
+EndGlobal

@@ -1,42 +1,113 @@
-# Hệ Thống Quản Lý & Theo Dõi Văn Bản Nợ Luân Chuyển (VCB)
+﻿# VCB DebtFlow - Hệ thống quản lý và luân chuyển hồ sơ văn bản nợ
 
-> Dự án chạy hoàn toàn **Local**: **React + Vite** (FE) ↔ **ASP.NET Core 8 Web API** (BE) ↔ **MySQL Local** (DB).
+## Kiến trúc
 
----
+```text
+Blazor Server / Interactive Server
+        ↓
+ASP.NET Core Services
+        ↓
+Entity Framework Core + Pomelo MySQL
+        ↓
+MySQL: vcb_debt_management
+```
 
-## ⚡ Hướng Dẫn Chạy Nhanh
+Dự án hiện chạy hoàn toàn bằng .NET. Không sử dụng React, Vite, Node.js hoặc Supabase.
 
-### 1. Chuẩn bị MySQL
-- Đảm bảo MySQL đang chạy ở `localhost:3306`
-- Database: `vcb_debt_management`
-- User/Pass: `root` / `24082002` (cấu hình trong `dotnet-solution/backend/DebtManagement.Api/appsettings.json`)
+## Yêu cầu
 
-### 2. Chạy Backend (Terminal 1)
+- Windows 10/11 hoặc Windows Server
+- .NET 8 SDK
+- MySQL Server port 3306
+- Database `vcb_debt_management`
+
+## Chạy local
+
 ```powershell
-cd D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Api
+cd D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\frontend\DebtManagement.BlazorApp
 dotnet run
 ```
-API chạy tại: `http://localhost:5000`  
-Swagger UI: `http://localhost:5000/swagger`
 
-### 3. Chạy Frontend (Terminal 2)
-```powershell
-cd D:\web\VCB_QuanLyChungTu\FE
-npm.cmd run dev
+Mở:
+
+```text
+http://localhost:5050
 ```
-Truy cập: `http://localhost:5173`
 
-### 4. Đăng nhập
-- **Email:** `admin@vcb.com`
-- **Mật khẩu:** `Admin@123456`
+## Tài khoản test
 
----
+```text
+admin@vcb.com / Admin@123456
+linhdtl.tah@vietcombank.com.vn / 123456a@
+haitm.tah@vietcombank.com.vn / 123456a@
+anhntl.tah@vietcombank.com.vn / 123456a@
+dangnx.tah@vietcombank.com.vn / 123456a@
+cuongcnc.tah@vietcombank.com.vn / 123456a@
+hoapt.tah@vietcombank.com.vn / 123456a@
+```
 
-## 📖 Tài Liệu Chi Tiết
+## Database migration
 
-Xem file **[PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md)** để đọc:
-- Chi tiết kiến trúc Clean Architecture
-- Cấu trúc 5 bảng CSDL MySQL
-- Tài liệu toàn bộ REST Endpoints
-- Quy trình luân chuyển PKH → PQN → PKT
-- Kịch bản kiểm thử và hướng dẫn xử lý lỗi
+```powershell
+cd D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\backend\DebtManagement.Api
+
+dotnet ef database update `
+  --project ..\DebtManagement.Infrastructure\DebtManagement.Infrastructure.csproj `
+  --startup-project .
+```
+
+## Build
+
+```powershell
+dotnet build D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\DebtManagement.sln
+```
+
+## Publish IIS
+
+```powershell
+cd D:\web\VCB_QuanLyChungTu\FE\dotnet-solution\frontend\DebtManagement.BlazorApp
+dotnet publish -c Release -o D:\publish\VCB-DebtManagement
+```
+
+Tài liệu IIS:
+
+```text
+dotnet-solution/frontend/DebtManagement.BlazorApp/docs/IIS_DEPLOYMENT.md
+```
+
+## Kiểm thử API
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass `
+  -File D:\web\VCB_QuanLyChungTu\FE\tests\ApiIntegrationTests.ps1 `
+  -Cleanup
+```
+
+## Cấu trúc
+
+```text
+dotnet-solution/
+├── DebtManagement.sln
+├── backend/
+│   ├── DebtManagement.Domain/
+│   ├── DebtManagement.Application/
+│   ├── DebtManagement.Infrastructure/
+│   └── DebtManagement.Api/
+└── frontend/
+    └── DebtManagement.BlazorApp/
+```
+
+## Workflow
+
+```text
+PKH → PQLN → PDV
+```
+
+- NV PKH khởi tạo hồ sơ.
+- SUP PKH duyệt.
+- NV PQLN tiếp nhận và xử lý chứng từ.
+- SUP PQLN duyệt.
+- NV PDV tiếp nhận và đi bút toán.
+- SUP PDV duyệt hoàn tất một hoặc hai lần tùy tình trạng chứng từ nợ.
+
+Múi giờ hiển thị: GMT+7 (`Asia/Bangkok`, tương đương Hà Nội và TP. Hồ Chí Minh).
