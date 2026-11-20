@@ -102,6 +102,12 @@ public class AppDbContext : DbContext
             e.Property(i => i.IsSupplemented).HasColumnName("is_supplemented");
             e.Property(i => i.SupplementedAt).HasColumnName("supplemented_at");
             e.Property(i => i.SupplementedByUserId).HasColumnName("supplemented_by_user_id");
+            e.Property(i => i.IsVerifiedByPqln).HasColumnName("is_verified_by_pqln");
+            e.Property(i => i.PqlnVerifiedAt).HasColumnName("pqln_verified_at");
+            e.Property(i => i.PqlnVerifiedByUserId).HasColumnName("pqln_verified_by_user_id");
+            e.Property(i => i.IsVerifiedByPdv).HasColumnName("is_verified_by_pdv");
+            e.Property(i => i.PdvVerifiedAt).HasColumnName("pdv_verified_at");
+            e.Property(i => i.PdvVerifiedByUserId).HasColumnName("pdv_verified_by_user_id");
             e.Property(i => i.Notes).HasColumnName("notes").HasMaxLength(1000);
             e.Property(i => i.SourceDepartmentId).HasColumnName("source_department_id");
             e.Property(i => i.CreatedByUserId).HasColumnName("created_by_user_id");
@@ -110,6 +116,10 @@ public class AppDbContext : DbContext
              .HasForeignKey(i => i.DebtDocumentId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(i => i.SupplementedByUser).WithMany()
              .HasForeignKey(i => i.SupplementedByUserId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<AppUser>().WithMany()
+             .HasForeignKey(i => i.PqlnVerifiedByUserId).OnDelete(DeleteBehavior.SetNull);
+             e.HasOne<AppUser>().WithMany()
+             .HasForeignKey(i => i.PdvVerifiedByUserId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(i => i.SourceDepartment).WithMany()
              .HasForeignKey(i => i.SourceDepartmentId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(i => i.CreatedByUser).WithMany()

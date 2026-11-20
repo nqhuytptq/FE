@@ -28,7 +28,34 @@ public class DebtDocumentRepository(AppDbContext db) : IDebtDocumentRepository
             q = q.Where(d => d.CustomerName.Contains(search) || d.DocumentNumber.Contains(search));
         return await q.OrderByDescending(d => d.CreatedAt).ToListAsync();
     }
+    public async Task<bool> TryTakePqlnOwnershipAsync(Guid id, Guid staffUserId, DateTime receivedAt)
+    {
+        var affected = await db.DebtDocuments
+            .Where(d => d.Id == id
+                    && d.Status == DocumentStatus.PqlnPendingReceive
+                    && d.PqlnReceiverId == null)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(d => d.PqlnReceiverId, staffUserId)
+                .SetProperty(d => d.PqlnReceivedAt, receivedAt)
+                .SetProperty(d => d.Status, DocumentStatus.PqlnReceived)
+                .SetProperty(d => d.UpdatedAt, receivedAt));
 
+        return affected > 0;
+    }
+    public async Task<bool> TryTakePdvOwnershipAsync(Guid id, Guid staffUserId, DateTime receivedAt)
+    {
+        var affected = await db.DebtDocuments
+            .Where(d => d.Id == id
+                    && d.Status == DocumentStatus.PdvPendingReceive
+                    && d.PdvReceiverId == null)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(d => d.PdvReceiverId, staffUserId)
+                .SetProperty(d => d.PdvReceivedAt, receivedAt)
+                .SetProperty(d => d.Status, DocumentStatus.PdvReceived)
+                .SetProperty(d => d.UpdatedAt, receivedAt));
+
+        return affected > 0;
+    }
     public async Task<DebtDocument?> GetByIdAsync(Guid id)
         => await Base(db).FirstOrDefaultAsync(d => d.Id == id);
 

@@ -5,6 +5,8 @@ namespace DebtManagement.Application.Interfaces;
 public interface IDebtDocumentRepository
 {
     Task<DebtDocument?> GetByIdAsync(Guid id);
+    Task<bool> TryTakePqlnOwnershipAsync(Guid id, Guid staffUserId, DateTime receivedAt);
+    Task<bool> TryTakePdvOwnershipAsync(Guid id, Guid staffUserId, DateTime receivedAt);
     Task<DebtDocument?> GetDetailByIdAsync(Guid id);
     Task<IReadOnlyList<DebtDocument>> GetAllAsync(
         string? status = null, Guid? departmentId = null, string? search = null);

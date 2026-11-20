@@ -7,7 +7,31 @@ public record UpdateUserRequest(string Name, Guid DepartmentId, string Role, boo
 public record LoginRequest(string Email, string Password);
 public record LoginResponse(string Token, AppUserDto User);
 
-public record DebtItemDto(Guid Id, Guid DebtDocumentId, string ItemName, bool IsSupplemented, DateTime? SupplementedAt, Guid? SupplementedByUserId, string? SupplementedByUserName, string? Notes, Guid? SourceDepartmentId, string? SourceDepartmentName, string? SourceDepartmentCode, Guid? CreatedByUserId, string? CreatedByUserName, DateTime CreatedAt);
+public record DebtItemDto(
+    Guid Id,
+    Guid DebtDocumentId,
+    string ItemName,
+    bool IsSupplemented,
+    DateTime? SupplementedAt,
+    Guid? SupplementedByUserId,
+    string? SupplementedByUserName,
+    string? Notes,
+    Guid? SourceDepartmentId,
+    string? SourceDepartmentName,
+    string? SourceDepartmentCode,
+    Guid? CreatedByUserId,
+    string? CreatedByUserName,
+    DateTime CreatedAt,
+    bool IsVerifiedByPqln = false,
+    DateTime? PqlnVerifiedAt = null,
+    Guid? PqlnVerifiedByUserId = null,
+    string? PqlnVerifiedByUserName = null,
+    bool IsVerifiedByPdv = false,
+    DateTime? PdvVerifiedAt = null,
+    Guid? PdvVerifiedByUserId = null,
+    string? PdvVerifiedByUserName = null);
+
+
 public record SupplementItemsRequest(List<Guid> SupplementedItemIds, string? Notes);
 public record AddDebtItemsRequest(List<CreateDebtItemRequest> Items, string? Notes);
 public record UpdateDebtItemRequest(string ItemName, string? Notes);
@@ -86,4 +110,5 @@ public class UpdateDebtDocumentRequest
 }
 
 public record ActionWithNotesRequest(string? Notes);
-
+public record VerifySupplementItemsRequest(List<Guid> ItemIds, string? Notes = null);
+public record VerifyPqlnSupplementItemsRequest(List<Guid> ItemIds, string? Notes = null);

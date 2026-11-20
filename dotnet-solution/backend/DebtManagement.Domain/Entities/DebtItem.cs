@@ -8,6 +8,14 @@ public class DebtItem
     public bool IsSupplemented { get; set; } = false;          // Đã bổ sung chưa
     public DateTime? SupplementedAt { get; set; }              // Thời gian bổ sung
     public Guid? SupplementedByUserId { get; set; }            // Người bổ sung
+
+    public bool IsVerifiedByPqln { get; set; }
+    public DateTime? PqlnVerifiedAt { get; set; }
+    public Guid? PqlnVerifiedByUserId { get; set; }
+
+    public bool IsVerifiedByPdv { get; set; }
+    public DateTime? PdvVerifiedAt { get; set; }
+    public Guid? PdvVerifiedByUserId { get; set; }
     public string? Notes { get; set; }                         // Ghi chú
 
     // Phòng ban khai báo chứng từ này (PKH / PQLN)

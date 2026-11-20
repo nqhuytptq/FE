@@ -4,6 +4,8 @@ namespace DebtManagement.Application.Interfaces;
 
 public interface IDebtDocumentService
 {
+    Task VerifySupplementItemsAsync(Guid id, VerifySupplementItemsRequest r, Guid u);
+    Task VerifyPqlnSupplementItemsAsync(Guid id, VerifyPqlnSupplementItemsRequest r, Guid u);
     Task<IReadOnlyList<DebtDocumentDto>> GetAllAsync(string? status, Guid? departmentId, string? search, Guid currentUserId);
     Task<DebtDocumentDetailDto?> GetByIdAsync(Guid id, Guid currentUserId);
 
@@ -23,7 +25,6 @@ public interface IDebtDocumentService
     Task AddDebtItemsAsync(Guid id, AddDebtItemsRequest request, Guid userId);
     Task UpdateDebtItemAsync(Guid documentId, Guid itemId, UpdateDebtItemRequest request, Guid userId);
     Task DeleteDebtItemAsync(Guid documentId, Guid itemId, Guid userId);
-
     Task ReturnAsync(Guid id, Guid toDepartmentId, string? notes, Guid userId);
     Task DeleteAsync(Guid id);
 }
