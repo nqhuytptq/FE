@@ -83,7 +83,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "admin@vcb.com",
                             IsActive = true,
                             Name = "Quản trị viên",
-                            PasswordHash = "$2a$11$fjHC2NwF04Cxk58h81Q5iur42YqSHI9oc00e7yYdvjgy1yb893qK.",
+                            PasswordHash = "$2a$11$N1vZDI.HqpGNBn8T3/nm/e0A/s4lu8p1oW7IJOsuBJyfh65PfpVdK",
                             Role = "admin"
                         },
                         new
@@ -94,7 +94,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "nv.pkh@vcb.com",
                             IsActive = true,
                             Name = "Nguyễn Văn Khách Hàng (NV)",
-                            PasswordHash = "$2a$11$bSeWmLpCh60UyyaiGXaLAe94DqaWuEOXrVGr/lkKmIQTmNF93MlbW",
+                            PasswordHash = "$2a$11$MWquEAKkTP.JDmzYv37wOeapoHaemfBCv83nuot6VHRB7/7NYslWO",
                             Role = "staff"
                         },
                         new
@@ -105,7 +105,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "sup.pkh@vcb.com",
                             IsActive = true,
                             Name = "Trần Trưởng Phòng KH (SUP)",
-                            PasswordHash = "$2a$11$k4ikBYP7YiHzqdvfNAghDutEHAZwDv6yJnBZ8lh5G4lJIXxxMOxeO",
+                            PasswordHash = "$2a$11$84iRSFITdkdsUpMIbJ8JR.EoGvVbeskJ0rGKZiggPvqNv6koPc9vW",
                             Role = "manager"
                         },
                         new
@@ -116,7 +116,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "nv.pqln@vcb.com",
                             IsActive = true,
                             Name = "Lê Quản Lý Nợ (NV)",
-                            PasswordHash = "$2a$11$bSeWmLpCh60UyyaiGXaLAe94DqaWuEOXrVGr/lkKmIQTmNF93MlbW",
+                            PasswordHash = "$2a$11$MWquEAKkTP.JDmzYv37wOeapoHaemfBCv83nuot6VHRB7/7NYslWO",
                             Role = "staff"
                         },
                         new
@@ -127,7 +127,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "sup.pqln@vcb.com",
                             IsActive = true,
                             Name = "Phạm Trưởng Phòng QLN (SUP)",
-                            PasswordHash = "$2a$11$k4ikBYP7YiHzqdvfNAghDutEHAZwDv6yJnBZ8lh5G4lJIXxxMOxeO",
+                            PasswordHash = "$2a$11$84iRSFITdkdsUpMIbJ8JR.EoGvVbeskJ0rGKZiggPvqNv6koPc9vW",
                             Role = "manager"
                         },
                         new
@@ -138,7 +138,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "nv.pdv@vcb.com",
                             IsActive = true,
                             Name = "Hoàng Dịch Vụ KH (NV)",
-                            PasswordHash = "$2a$11$bSeWmLpCh60UyyaiGXaLAe94DqaWuEOXrVGr/lkKmIQTmNF93MlbW",
+                            PasswordHash = "$2a$11$MWquEAKkTP.JDmzYv37wOeapoHaemfBCv83nuot6VHRB7/7NYslWO",
                             Role = "staff"
                         },
                         new
@@ -149,7 +149,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "sup.pdv@vcb.com",
                             IsActive = true,
                             Name = "Vũ Trưởng Phòng DVKH (SUP)",
-                            PasswordHash = "$2a$11$k4ikBYP7YiHzqdvfNAghDutEHAZwDv6yJnBZ8lh5G4lJIXxxMOxeO",
+                            PasswordHash = "$2a$11$84iRSFITdkdsUpMIbJ8JR.EoGvVbeskJ0rGKZiggPvqNv6koPc9vW",
                             Role = "manager"
                         });
                 });
@@ -381,6 +381,14 @@ namespace DebtManagement.Infrastructure.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("is_supplemented");
 
+                    b.Property<bool>("IsVerifiedByPdv")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("is_verified_by_pdv");
+
+                    b.Property<bool>("IsVerifiedByPqln")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("is_verified_by_pqln");
+
                     b.Property<string>("ItemName")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -391,6 +399,22 @@ namespace DebtManagement.Infrastructure.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("varchar(1000)")
                         .HasColumnName("notes");
+
+                    b.Property<DateTime?>("PdvVerifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("pdv_verified_at");
+
+                    b.Property<Guid?>("PdvVerifiedByUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("pdv_verified_by_user_id");
+
+                    b.Property<DateTime?>("PqlnVerifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("pqln_verified_at");
+
+                    b.Property<Guid?>("PqlnVerifiedByUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("pqln_verified_by_user_id");
 
                     b.Property<Guid?>("SourceDepartmentId")
                         .HasColumnType("char(36)")
@@ -409,6 +433,10 @@ namespace DebtManagement.Infrastructure.Migrations
                     b.HasIndex("CreatedByUserId");
 
                     b.HasIndex("DebtDocumentId");
+
+                    b.HasIndex("PdvVerifiedByUserId");
+
+                    b.HasIndex("PqlnVerifiedByUserId");
 
                     b.HasIndex("SourceDepartmentId");
 
@@ -604,6 +632,16 @@ namespace DebtManagement.Infrastructure.Migrations
                         .HasForeignKey("DebtDocumentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("DebtManagement.Domain.Entities.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("PdvVerifiedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("DebtManagement.Domain.Entities.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("PqlnVerifiedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("DebtManagement.Domain.Entities.Department", "SourceDepartment")
                         .WithMany()
