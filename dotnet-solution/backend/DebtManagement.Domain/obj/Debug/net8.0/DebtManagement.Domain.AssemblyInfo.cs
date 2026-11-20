@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("DebtManagement.Domain")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c0c913f482c4357f0f5358b67dcf136b6ca4290e")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+49848ebd2921ee9cce77062aa7afd32c4b64f8c3")]
 [assembly: System.Reflection.AssemblyProductAttribute("DebtManagement.Domain")]
 [assembly: System.Reflection.AssemblyTitleAttribute("DebtManagement.Domain")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

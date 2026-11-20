@@ -1,10 +1,30 @@
-﻿<div class="sidebar-nav">
-    <NavLink class="sidebar-link" href="" Match="NavLinkMatch.All"><i class="bi bi-grid-1x2-fill"></i><span>Tổng quan</span></NavLink>
-    <div class="sidebar-section">NGHIỆP VỤ</div>
-    <NavLink class="sidebar-link" href=""><i class="bi bi-files"></i><span>Hồ sơ văn bản nợ</span></NavLink>
-    <NavLink class="sidebar-link" href=""><i class="bi bi-inbox"></i><span>Hồ sơ chờ xử lý</span></NavLink>
-    <NavLink class="sidebar-link" href=""><i class="bi bi-clock-history"></i><span>Lịch sử luân chuyển</span></NavLink>
-    <div class="sidebar-section">HỆ THỐNG</div>
-    <NavLink class="sidebar-link" href=""><i class="bi bi-people"></i><span>Người dùng</span></NavLink>
-    <NavLink class="sidebar-link" href=""><i class="bi bi-gear"></i><span>Cấu hình</span></NavLink>
-</div>
+﻿@inject BlazorSession Session
+
+<aside class="vcb-sidebar">
+    <div class="vcb-brand">
+        <div class="vcb-logo-badge">VCB</div>
+        <div>
+            <div class="fw-bold text-white" style="font-size: 14.5px; line-height: 1.2;">Debt Management</div>
+            <div style="font-size: 11.5px; color: rgba(255,255,255,0.62);">Quản lý hồ sơ nợ</div>
+        </div>
+    </div>
+
+    <nav>
+        <NavLink class="vcb-nav-item" href="" Match="NavLinkMatch.All">
+            <span>📁</span>
+            <span>Hồ sơ văn bản nợ</span>
+        </NavLink>
+        <a class="vcb-nav-item" href="javascript:void(0)" title="Đang phát triển">
+            <span>📊</span>
+            <span>Báo cáo</span>
+        </a>
+        <a class="vcb-nav-item" href="javascript:void(0)" title="Đang phát triển">
+            <span>⚙️</span>
+            <span>Cài đặt</span>
+        </a>
+    </nav>
+
+    <div class="vcb-sidebar-footer">
+        Vietcombank · Nội bộ
+    </div>
+</aside>

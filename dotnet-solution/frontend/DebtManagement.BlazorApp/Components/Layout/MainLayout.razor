@@ -1,20 +1,8 @@
 ﻿@inherits LayoutComponentBase
 
-<div class="app-shell">
-    <aside class="app-sidebar">
-        <div class="brand-block">
-            <div class="brand-mark"><i class="bi bi-bank2"></i></div>
-            <div><div class="brand-name">VCB DebtFlow</div><div class="brand-caption">Hệ thống quản lý hồ sơ</div></div>
-        </div>
-        <NavMenu />
-        <div class="sidebar-footer"><i class="bi bi-shield-check"></i><span>Bảo mật nội bộ</span></div>
-    </aside>
-    <main class="app-main">
-        <header class="app-topbar">
-            <div><div class="breadcrumb-label">WORKSPACE</div><h1>Quản lý hồ sơ văn bản nợ</h1></div>
-            <div class="topbar-status"><span class="status-dot"></span><span>Hệ thống hoạt động</span></div>
-        </header>
-        <section class="app-content">@Body</section>
+<div class="d-flex">
+    <NavMenu />
+    <main class="vcb-main flex-grow-1">
+        @Body
     </main>
 </div>
-<div id="blazor-error-ui">Đã xảy ra lỗi hệ thống. <a href="" class="reload">Tải lại</a><a class="dismiss">×</a></div>
