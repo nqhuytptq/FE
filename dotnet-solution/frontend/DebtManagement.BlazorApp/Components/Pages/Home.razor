@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @inject BlazorSession Session
 @inject IDebtDocumentService DocService
 @inject IUserService UserService
@@ -44,9 +44,13 @@ else
             <div class="card mb-3 border-primary"><div class="card-header text-primary fw-bold">Tạo hồ sơ mới</div><div class="card-body">
                 @if (createError != null) { <div class="alert alert-danger">@createError</div> }
                 <div class="row g-2 mb-2">
+                    <label class="form-label small fw-semibold mb-1">Tên khách hàng <span class="text-danger">*</span></label>
                     <div class="col-md-4"><input class="form-control" @bind="newName" placeholder="Tên khách hàng" /></div>
+                    <label class="form-label small fw-semibold mb-1">Số điện thoại <span class="text-danger">*</span></label>
                     <div class="col-md-3"><input class="form-control" @bind="newPhone" placeholder="SĐT" /></div>
-                    <div class="col-md-2"><input class="form-control" @bind="newIssue" placeholder="Ngày PS (yyyy-MM-dd)" /></div>
+                    <label class="form-label small fw-semibold mb-1">Ngày phát sinh<span class="text-danger">*</span></label>
+                    <div class="col-md-2"><input class="form-control" @bind="newIssue" placeholder="Ngày PS (yyyy-MM-dd)" disabled/></div>
+                    <label class="form-label small fw-semibold mb-1">Hạn thanh toán đầy đủ <span class="text-danger">*</span></label>
                     <div class="col-md-3"><input class="form-control" @bind="newDue" placeholder="Hạn TT (yyyy-MM-dd)" /></div>
                 </div>
                 <div class="form-check mb-2"><input class="form-check-input" type="checkbox" @bind="newHasDebt" id="hd" /><label class="form-check-label" for="hd">Có chứng từ nợ</label></div>
@@ -168,7 +172,7 @@ else
     async Task AddPqlnItem()
     {
         if (selected==null||string.IsNullOrWhiteSpace(addItemName)) return;
-        try { await DocService.AddDebtItemsAsync(selected.Id,new AddDebtItemsRequest(new List<CreateDebtItemRequest>{ new CreateDebtItemRequest { ItemName = addItemName } }, "PQLN Blazor"),Session.CurrentUser!.Id); addItemName=""; await ViewAsync(selected.Id); }
+        try { await DocService.AddDebtItemsAsync(selected.Id,new AddDebtItemsRequest(new List<CreateDebtItemRequest>{ new CreateDebtItemRequest { ItemName = addItemName } }, "Thêm chứng từ nợ tại PQLN"),Session.CurrentUser!.Id); addItemName=""; await ViewAsync(selected.Id); }
         catch (Exception e) { actionMessage=e.Message; }
     }
 
@@ -176,18 +180,18 @@ else
     async Task SupplementItems()
     {
         if (selected==null||suppIds.Count==0) return;
-        try { await DocService.SupplementItemsAsync(selected.Id,new SupplementItemsRequest(suppIds.ToList(),"Bổ sung Blazor"),Session.CurrentUser!.Id); suppIds.Clear(); await ViewAsync(selected.Id); await LoadAsync(); actionMessage="Bổ sung thành công"; }
+        try { await DocService.SupplementItemsAsync(selected.Id,new SupplementItemsRequest(suppIds.ToList(),"Bổ sung chứng từ nợ"),Session.CurrentUser!.Id); suppIds.Clear(); await ViewAsync(selected.Id); await LoadAsync(); actionMessage="Bổ sung thành công"; }
         catch (Exception e) { actionMessage=e.Message; }
     }
 
     async Task Act(Func<Task> f) { try { await f(); actionMessage="Thành công"; await LoadAsync(); if (selected!=null) await ViewAsync(selected.Id); } catch (Exception e) { actionMessage=e.Message; } }
-    Task ApprovePkh()=>Act(()=>DocService.PkhSupApproveAsync(selected!.Id,"Duyệt Blazor",Session.CurrentUser!.Id));
+    Task ApprovePkh()=>Act(()=>DocService.PkhSupApproveAsync(selected!.Id,"SUP duyệt hồ sơ",Session.CurrentUser!.Id));
     Task ReceivePqln()=>Act(()=>DocService.PqlnTakeOwnershipAsync(selected!.Id,Session.CurrentUser!.Id));
-    Task SubmitPqln()=>Act(()=>DocService.PqlnSubmitSupAsync(selected!.Id,"Đẩy SUP Blazor",Session.CurrentUser!.Id));
-    Task ApprovePqln()=>Act(()=>DocService.PqlnSupApproveAsync(selected!.Id,"Duyệt Blazor",Session.CurrentUser!.Id));
+    Task SubmitPqln()=>Act(()=>DocService.PqlnSubmitSupAsync(selected!.Id,"Kiểm tra và gửi SUP PQLN phê duyệt",Session.CurrentUser!.Id));
+    Task ApprovePqln()=>Act(()=>DocService.PqlnSupApproveAsync(selected!.Id,"SUP duyệt hồ sơ",Session.CurrentUser!.Id));
     Task ReceivePdv()=>Act(()=>DocService.PdvTakeOwnershipAsync(selected!.Id,Session.CurrentUser!.Id));
-    Task PostEntry()=>Act(()=>DocService.PdvPostEntryAsync(selected!.Id,"Bút toán Blazor",Session.CurrentUser!.Id));
-    Task ApprovePdv()=>Act(()=>DocService.PdvSupApproveAsync(selected!.Id,"Hoàn tất Blazor",Session.CurrentUser!.Id));
+    Task PostEntry()=>Act(()=>DocService.PdvPostEntryAsync(selected!.Id,"Thực hiện đi bút toán",Session.CurrentUser!.Id));
+    Task ApprovePdv()=>Act(()=>DocService.PdvSupApproveAsync(selected!.Id,"SUP PDV kiểm tra và duyệt hoàn tất",Session.CurrentUser!.Id));
 }
 
 

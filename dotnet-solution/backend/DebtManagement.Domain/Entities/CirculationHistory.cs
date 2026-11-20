@@ -1,4 +1,4 @@
-﻿namespace DebtManagement.Domain.Entities;
+namespace DebtManagement.Domain.Entities;
 
 public enum CirculationAction
 {
@@ -13,7 +13,8 @@ public enum CirculationAction
     Supplemented,        // Bổ sung chứng từ nợ
     Completed,           // ĐÃ HOÀN TẤT
     Rejected,            // Từ chối
-    Returned             // Trả về
+    Returned,            // Trả về
+    Edited               // Chỉnh sửa hồ sơ/chứng từ nợ
 }
 
 public class CirculationHistory

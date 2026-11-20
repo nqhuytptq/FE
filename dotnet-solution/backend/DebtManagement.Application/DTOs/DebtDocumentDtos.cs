@@ -1,4 +1,4 @@
-﻿namespace DebtManagement.Application.DTOs;
+namespace DebtManagement.Application.DTOs;
 
 public record DepartmentDto(Guid Id, string Name, string Code, string? Description, int SortOrder);
 public record AppUserDto(Guid Id, string Name, string Email, string Role, Guid? DepartmentId, string? DepartmentName, string? DepartmentCode, bool IsActive, DateTime CreatedAt);
@@ -10,6 +10,7 @@ public record LoginResponse(string Token, AppUserDto User);
 public record DebtItemDto(Guid Id, Guid DebtDocumentId, string ItemName, bool IsSupplemented, DateTime? SupplementedAt, Guid? SupplementedByUserId, string? SupplementedByUserName, string? Notes, Guid? SourceDepartmentId, string? SourceDepartmentName, string? SourceDepartmentCode, Guid? CreatedByUserId, string? CreatedByUserName, DateTime CreatedAt);
 public record SupplementItemsRequest(List<Guid> SupplementedItemIds, string? Notes);
 public record AddDebtItemsRequest(List<CreateDebtItemRequest> Items, string? Notes);
+public record UpdateDebtItemRequest(string ItemName, string? Notes);
 
 public record DebtDocumentDto(
     Guid Id, string DocumentNumber, string CustomerName, string? CustomerPhone, string? CustomerType,

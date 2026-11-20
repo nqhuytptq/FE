@@ -1,4 +1,4 @@
-﻿using DebtManagement.Application.Interfaces;
+using DebtManagement.Application.Interfaces;
 using DebtManagement.Domain.Entities;
 using DebtManagement.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -67,4 +67,5 @@ public class DebtDocumentRepository(AppDbContext db) : IDebtDocumentRepository
     public async Task AddDebtItemsAsync(IEnumerable<DebtItem> items) { db.DebtItems.AddRange(items); await db.SaveChangesAsync(); }
     public async Task RemoveDebtItemsAsync(Guid documentId) { var items = await db.DebtItems.Where(i => i.DebtDocumentId == documentId).ToListAsync(); if (items.Count > 0) { db.DebtItems.RemoveRange(items); await db.SaveChangesAsync(); } }
     public async Task UpdateDebtItemAsync(DebtItem item) { db.DebtItems.Update(item); await db.SaveChangesAsync(); }
+    public async Task DeleteDebtItemAsync(Guid itemId) { var item = await db.DebtItems.FindAsync(itemId); if (item != null) { db.DebtItems.Remove(item); await db.SaveChangesAsync(); } }
 }

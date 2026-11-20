@@ -1,4 +1,4 @@
-﻿using DebtManagement.Domain.Entities;
+using DebtManagement.Domain.Entities;
 
 namespace DebtManagement.Application.Interfaces;
 
@@ -19,6 +19,7 @@ public interface IDebtDocumentRepository
     Task AddDebtItemsAsync(IEnumerable<DebtItem> items);
     Task RemoveDebtItemsAsync(Guid documentId);
     Task UpdateDebtItemAsync(DebtItem item);
+    Task DeleteDebtItemAsync(Guid itemId);
 }
 
 public interface IDepartmentRepository

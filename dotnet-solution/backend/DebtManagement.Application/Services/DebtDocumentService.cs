@@ -1,4 +1,4 @@
-﻿using DebtManagement.Application.DTOs;
+using DebtManagement.Application.DTOs;
 using DebtManagement.Application.Interfaces;
 using DebtManagement.Domain.Entities;
 
@@ -120,11 +120,11 @@ public class DebtDocumentService(
             ?? throw new InvalidOperationException("Không tìm thấy phòng ban PKH");
         var d = new DebtDocument
         {
-            DocumentNumber = $"VB-{DateTime.UtcNow.Year}-{Guid.NewGuid().ToString()[..8].ToUpper()}",
+            DocumentNumber = $"VB-{DateTime.UtcNow.AddHours(7):yyyy-MM-dd}-{Random.Shared.Next(100000, 1000000)}",
             CustomerName = r.CustomerName,
             CustomerPhone = r.CustomerPhone,
             CustomerType = string.IsNullOrEmpty(r.CustomerType) ? null : Enum.Parse<CustomerType>(r.CustomerType, true),
-            IssueDate = DateOnly.Parse(r.IssueDate),
+            IssueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7)),
             DueDate = DateOnly.Parse(r.DueDate),
             CurrentDepartmentId = pkh.Id,
             Status = DocumentStatus.PkhPendingSup,
@@ -146,8 +146,9 @@ public class DebtDocumentService(
                     CreatedByUserId = uid
                 }));
 
+        var itemSummary = d.DebtItems.Count == 0 ? "Không có chứng từ nợ" : $"Chứng từ nợ: {string.Join(", ", d.DebtItems.Select(x => x.ItemName))}";
         await AddHistory(d.Id, null, pkh.Id, CirculationAction.Created,
-            DocumentStatus.PkhPendingSup, uid, "Khởi tạo hồ sơ tại phòng Khách hàng và gửi SUP PKH");
+            DocumentStatus.PkhPendingSup, uid, $"Tạo hồ sơ {d.DocumentNumber} cho khách hàng '{d.CustomerName}'. Ngày phát sinh: {d.IssueDate:dd/MM/yyyy}. {itemSummary}. Hồ sơ được gửi SUP PKH phê duyệt.");
 
         return Map((await docs.GetByIdAsync(d.Id))!);
     }
@@ -162,7 +163,6 @@ public class DebtDocumentService(
         d.CustomerName = r.CustomerName;
         d.CustomerPhone = r.CustomerPhone;
         d.CustomerType = string.IsNullOrEmpty(r.CustomerType) ? null : Enum.Parse<CustomerType>(r.CustomerType, true);
-        d.IssueDate = DateOnly.Parse(r.IssueDate);
         d.DueDate = DateOnly.Parse(r.DueDate);
         d.Priority = Enum.Parse<DocumentPriority>(r.Priority, true);
         d.Notes = r.Notes;
@@ -274,7 +274,7 @@ public class DebtDocumentService(
     {
         var d = await docs.GetDetailByIdAsync(id) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
         var pqln = await departments.GetByCodeAsync("PQLN");
-        if (pqln == null || d.CurrentDepartmentId != pqln.Id || d.PqlnReceiverId != u)
+        if (pqln == null || d.CurrentDepartmentId != pqln.Id || d.PqlnReceiverId != u || d.Status != DocumentStatus.PqlnReceived)
             throw new InvalidOperationException("Chỉ cán bộ PQLN đã tiếp nhận hồ sơ mới được thêm chứng từ nợ");
         var items = (r.Items ?? [])
             .Where(x => !string.IsNullOrWhiteSpace(x.ItemName))
@@ -290,9 +290,42 @@ public class DebtDocumentService(
         await docs.AddDebtItemsAsync(items);
         d.HasDebtDocuments = true;
         await docs.UpdateAsync(d);
-        await AddHistory(id, d.CurrentDepartmentId, d.CurrentDepartmentId, CirculationAction.Supplemented, d.Status, u, r.Notes ?? "NV PQLN thêm chứng từ nợ mới vào hồ sơ");
+        await AddHistory(id, d.CurrentDepartmentId, d.CurrentDepartmentId, CirculationAction.Supplemented, d.Status, u, $"Thêm chứng từ nợ tại PQLN: {string.Join(", ", items.Select(x => x.ItemName))}. Ghi chú yêu cầu: {r.Notes ?? "Không có"}.");
     }
 
+    private async Task<DebtItem> GetEditableItemAsync(Guid documentId, Guid itemId, Guid userId)
+    {
+        var (user, dept) = await GetActorAsync(userId);
+        var document = await docs.GetDetailByIdAsync(documentId) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
+        var item = document.DebtItems.FirstOrDefault(x => x.Id == itemId) ?? throw new InvalidOperationException("Không tìm thấy chứng từ nợ");
+        var allowed = dept?.Code switch
+        {
+            "PKH" => document.Status == DocumentStatus.PkhPendingSup && item.SourceDepartmentId == dept.Id && item.CreatedByUserId == userId,
+            "PQLN" => document.Status == DocumentStatus.PqlnPendingSup && item.SourceDepartmentId == dept.Id && item.CreatedByUserId == userId,
+            _ => false
+        };
+        if (!allowed) throw new UnauthorizedAccessException("Chỉ được sửa/xóa chứng từ trước khi gửi SUP phòng mình phê duyệt");
+        return item;
+    }
+
+    public async Task UpdateDebtItemAsync(Guid documentId, Guid itemId, UpdateDebtItemRequest request, Guid userId)
+    {
+        if (string.IsNullOrWhiteSpace(request.ItemName)) throw new InvalidOperationException("Tên chứng từ không được để trống");
+        var item = await GetEditableItemAsync(documentId, itemId, userId);
+        var oldName = item.ItemName; item.ItemName = request.ItemName.Trim(); item.Notes = request.Notes;
+        await docs.UpdateDebtItemAsync(item);
+        await AddHistory(documentId, null, null, CirculationAction.Edited, (await docs.GetByIdAsync(documentId))!.Status, userId, $"Sửa chứng từ nợ: ''{oldName}'' → ''{item.ItemName}''. Ghi chú: {item.Notes ?? "Không có"}.");
+    }
+
+    public async Task DeleteDebtItemAsync(Guid documentId, Guid itemId, Guid userId)
+    {
+        var item = await GetEditableItemAsync(documentId, itemId, userId);
+        var document = await docs.GetByIdAsync(documentId) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
+        await docs.DeleteDebtItemAsync(itemId);
+        document.HasDebtDocuments = (await docs.GetDebtItemsAsync(documentId)).Count > 0;
+        await docs.UpdateAsync(document);
+        await AddHistory(documentId, document.CurrentDepartmentId, document.CurrentDepartmentId, CirculationAction.Edited, document.Status, userId, $"Xóa chứng từ nợ: ''{item.ItemName}''. Cập nhật trạng thái hồ sơ còn chứng từ: {document.HasDebtDocuments}.");
+    }
     public async Task SupplementItemsAsync(Guid id, SupplementItemsRequest r, Guid u)
     {
         var (user, dept) = await GetActorAsync(u);
@@ -313,7 +346,7 @@ public class DebtDocumentService(
             x.SupplementedByUserId = u;
             await docs.UpdateDebtItemAsync(x);
         }
-        await AddHistory(id, d.CurrentDepartmentId, d.CurrentDepartmentId, CirculationAction.Supplemented, d.Status, u, r.Notes ?? "Bổ sung chứng từ nợ");
+        await AddHistory(id, d.CurrentDepartmentId, d.CurrentDepartmentId, CirculationAction.Supplemented, d.Status, u, $"Bổ sung các chứng từ nợ: {string.Join(", ", (await docs.GetDebtItemsAsync(id)).Where(x => r.SupplementedItemIds.Contains(x.Id)).Select(x => x.ItemName))}. Ghi chú: {r.Notes ?? "Không có"}.");
     }
 
     public async Task ReturnAsync(Guid id, Guid to, string? n, Guid u)

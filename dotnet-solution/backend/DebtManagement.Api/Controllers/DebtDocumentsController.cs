@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using DebtManagement.Application.DTOs;
 using DebtManagement.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -88,6 +88,14 @@ public class DebtDocumentsController(IDebtDocumentService service) : ControllerB
         try { await service.AddDebtItemsAsync(id, request, CurrentUserId); return NoContent(); }
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
+
+    [HttpPut("{documentId:guid}/debt-items/{itemId:guid}")]
+    public async Task<IActionResult> UpdateDebtItem(Guid documentId, Guid itemId, [FromBody] UpdateDebtItemRequest request)
+    { try { await service.UpdateDebtItemAsync(documentId, itemId, request, CurrentUserId); return NoContent(); } catch (UnauthorizedAccessException ex) { return StatusCode(403, new { error = ex.Message }); } catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); } }
+
+    [HttpDelete("{documentId:guid}/debt-items/{itemId:guid}")]
+    public async Task<IActionResult> DeleteDebtItem(Guid documentId, Guid itemId)
+    { try { await service.DeleteDebtItemAsync(documentId, itemId, CurrentUserId); return NoContent(); } catch (UnauthorizedAccessException ex) { return StatusCode(403, new { error = ex.Message }); } catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); } }
 
     [HttpPost("{id:guid}/return")]
     public async Task<IActionResult> Return(Guid id, [FromBody] ReturnDocumentRequest request)

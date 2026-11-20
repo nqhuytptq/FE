@@ -1,4 +1,4 @@
-﻿using DebtManagement.Application.DTOs;
+using DebtManagement.Application.DTOs;
 
 namespace DebtManagement.Application.Interfaces;
 
@@ -21,6 +21,8 @@ public interface IDebtDocumentService
 
     Task SupplementItemsAsync(Guid id, SupplementItemsRequest request, Guid userId);
     Task AddDebtItemsAsync(Guid id, AddDebtItemsRequest request, Guid userId);
+    Task UpdateDebtItemAsync(Guid documentId, Guid itemId, UpdateDebtItemRequest request, Guid userId);
+    Task DeleteDebtItemAsync(Guid documentId, Guid itemId, Guid userId);
 
     Task ReturnAsync(Guid id, Guid toDepartmentId, string? notes, Guid userId);
     Task DeleteAsync(Guid id);
