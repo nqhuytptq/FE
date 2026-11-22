@@ -193,14 +193,35 @@ else
                     <button class="btn btn-sm btn-light" @onclick="() => showCreateModal = false">✕</button>
                 </div>
                 @if (createError != null) { <div class="alert alert-danger py-2 small">@createError</div> }
+
+                @* Chọn loại khách hàng: Công ty / Cá nhân *@
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold mb-1">Đối tượng khách hàng <span class="text-danger">*</span></label>
+                    <div class="d-flex gap-2">
+                        <button type="button"
+                                class="btn btn-sm px-3 fw-semibold rounded-3 @(newCustomerType == "company" ? "btn-success" : "btn-outline-secondary")"
+                                @onclick='() => newCustomerType = "company"'>
+                            🏢 Công ty
+                        </button>
+                        <button type="button"
+                                class="btn btn-sm px-3 fw-semibold rounded-3 @(newCustomerType == "individual" ? "btn-success" : "btn-outline-secondary")"
+                                @onclick='() => newCustomerType = "individual"'>
+                            👤 Cá nhân
+                        </button>
+                    </div>
+                </div>
+
                 <div class="row g-3 mb-3">
                     <div class="col-md-4">
-                        <label class="form-label small fw-semibold mb-1">Tên khách hàng <span class="text-danger">*</span></label>
-                        <input class="form-control" @bind="newName" placeholder="Nhập tên khách hàng" />
+                        <label class="form-label small fw-semibold mb-1">
+                            @(newCustomerType == "company" ? "Tên công ty / doanh nghiệp" : "Họ và tên khách hàng") <span class="text-danger">*</span>
+                        </label>
+                        <input class="form-control" @bind="newName"
+                               placeholder="@(newCustomerType == "company" ? "Nhập tên công ty..." : "Nhập họ và tên khách hàng...")" />
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label small fw-semibold mb-1">Số điện thoại</label>
-                        <input class="form-control" @bind="newPhone" placeholder="Nhập SĐT" />
+                        <label class="form-label small fw-semibold mb-1">Mã CIF</label>
+                        <input class="form-control" @bind="newCif" placeholder="Nhập mã CIF..." />
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small fw-semibold mb-1">Ngày phát sinh</label>
@@ -211,6 +232,7 @@ else
                         <input class="form-control" @bind="newDue" placeholder="yyyy-MM-dd" />
                     </div>
                 </div>
+
                 <div class="form-check mb-2">
                     <input class="form-check-input" type="checkbox" @bind="newHasDebt" id="hd" />
                     <label class="form-check-label fw-semibold small" for="hd">Có chứng từ nợ kèm theo</label>
@@ -276,9 +298,9 @@ else
             </button>
         </div>
 
-        @* ================= BẢNG DANH SÁCH HỒ SƠ ================= *@
-        <div class="vcb-surface">
-            <div class="p-3 px-4 border-bottom">
+        @* ================= THANH TÌM KIẾM & TAB LỌC ================= *@
+        <div class="vcb-surface mb-3">
+            <div class="p-3 px-4">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
                     <div class="d-flex align-items-center gap-2">
                         <span class="fw-bold" style="font-size: 15.5px;">Danh sách hồ sơ</span>
@@ -286,11 +308,11 @@ else
                     </div>
 
                     <div class="d-flex flex-wrap align-items-center gap-2">
-                        <div class="vcb-input-wrap" style="width: 235px;">
+                        <div class="vcb-input-wrap" style="width: 245px;">
                             <span class="vcb-input-icon" style="font-size: 13px;">🔍</span>
                             <input class="vcb-input" style="height: 35px; font-size: 13px;"
                                    @bind="searchText" @bind:event="oninput"
-                                   placeholder="Tìm số VB, khách hàng, cán bộ..." />
+                                   placeholder="Tìm số VB, CIF, khách hàng..." />
                         </div>
 
                         <select class="form-select form-select-sm rounded-3" style="width: 132px; height: 35px;" @bind="filterDept">
@@ -348,137 +370,86 @@ else
                     </button>
                 </div>
             </div>
-
-            <div class="table-responsive">
-                <table class="table vcb-table mb-0">
-                    <thead>
-                        <tr>
-                            <th>HỒ SƠ / KHÁCH HÀNG</th>
-                            <th>NGƯỜI PHỤ TRÁCH</th>
-                            <th>PHÒNG & TRẠNG THÁI</th>
-                            <th>CHỨNG TỪ NỢ</th>
-                            <th>THỜI GIAN</th>
-                            <th class="text-end">THAO TÁC</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (filtered.Count == 0)
-                        {
-                            <tr>
-                                <td colspan="6" class="text-center py-5">
-                                    @if (quickTab == "mine" && string.IsNullOrWhiteSpace(searchText) && string.IsNullOrEmpty(filterDept))
-                                    {
-                                        <div class="fw-semibold text-success mb-1" style="font-size: 15px;">
-                                            🎉 Bạn đã hoàn thành tất cả hồ sơ cần xử lý!
-                                        </div>
-                                        <div class="text-muted small mb-3">Hiện không có hồ sơ hay chứng từ nào đang chờ thao tác của bạn.</div>
-                                        <button type="button" class="btn btn-sm btn-outline-success rounded-pill px-3"
-                                                @onclick='() => quickTab = "active"'>
-                                            Xem hồ sơ đang theo dõi (@docs.Count(d => d.Status != "Completed"))
-                                        </button>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">Không có hồ sơ nào phù hợp điều kiện lọc hiện tại.</span>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                        @foreach (var d in filtered)
-                        {
-                            var actionLabel = GetMyActionLabel(d);
-                            var isMyTurn = actionLabel != null;
-                            var isOverdue = IsOverdue(d);
-                            var pct = d.TotalDebtItems == 0 ? 100 : (int)Math.Round(100.0 * d.SupplementedDebtItems / d.TotalDebtItems);
-
-                            <tr class="@(isMyTurn ? "vcb-row-action" : "")" style="cursor: pointer;" @onclick="() => ViewAsync(d.Id)">
-                                @* 1. Số VB + Khách hàng *@
-                                <td>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="fw-semibold text-muted" style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;">
-                                            @d.DocumentNumber
-                                        </span>
-                                        @if (d.Priority is "high" or "urgent")
-                                        {
-                                            <span class="badge bg-danger" style="font-size: 10.5px;">Khẩn</span>
-                                        }
-                                    </div>
-                                    <div class="fw-bold mt-1" style="font-size: 14px;">
-                                        @d.CustomerName
-                                        @if (!string.IsNullOrWhiteSpace(d.CustomerPhone))
-                                        {
-                                            <span class="fw-normal text-muted" style="font-size: 12.5px;"> · @d.CustomerPhone</span>
-                                        }
-                                    </div>
-                                </td>
-
-                                @* 2. Người phụ trách (Hồ sơ của ai) *@
-                                <td>
-                                    <div class="fw-semibold" style="font-size: 13.5px;">
-                                        @CurrentHandlerText(d)
-                                    </div>
-                                    <div class="text-muted mt-1" style="font-size: 12px;">
-                                        Tạo PKH: @(d.CreatedByUserName ?? "—")
-                                    </div>
-                                </td>
-
-                                @* 3. Phòng & Trạng thái *@
-                                <td>
-                                    <div class="d-flex flex-wrap align-items-center gap-1">
-                                        <span class="vcb-dept-pill">@d.CurrentDepartmentCode</span>
-                                        <span class="vcb-status-pill @StatusPillClass(d.Status)">
-                                            <span class="dot"></span>
-                                            @StatusLabel(d.Status)
-                                        </span>
-                                    </div>
-                                </td>
-
-                                @* 4. Chứng từ nợ *@
-                                <td>
-                                    @if (d.TotalDebtItems == 0)
-                                    {
-                                        <span class="text-muted small">Không có</span>
-                                    }
-                                    else
-                                    {
-                                        <div class="d-flex align-items-center gap-2">
-                                            <div class="vcb-progress-track">
-                                                <div class="vcb-progress-fill" style="width: @(pct)%;"></div>
-                                            </div>
-                                            <span class="small fw-semibold @(d.SupplementedDebtItems >= d.TotalDebtItems ? "text-success" : "text-muted")">
-                                                @d.SupplementedDebtItems/@d.TotalDebtItems
-                                            </span>
-                                        </div>
-                                    }
-                                </td>
-
-                                @* 5. Mốc thời gian *@
-                                <td style="font-size: 12.5px;">
-                                    <div class="text-muted">CN: @FormatVnTime(d.UpdatedAt)</div>
-                                    <div class="mt-1 @(isOverdue ? "text-danger fw-bold" : "text-muted")">
-                                        Hạn: @FormatDate(d.DueDate) @(isOverdue ? "(Quá hạn)" : "")
-                                    </div>
-                                </td>
-
-                                @* 6. Nút thao tác rõ nghĩa *@
-                                <td class="text-end">
-                                    @if (isMyTurn)
-                                    {
-                                        <span class="badge rounded-pill px-3 py-2 text-white" style="background: #0a7a42; font-size: 12px;">
-                                            @actionLabel →
-                                        </span>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-success fw-semibold small">Xem ›</span>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
         </div>
+
+        @* ================= PHÂN TÁCH 2 PHẦN: CÔNG TY & CÁ NHÂN ================= *@
+        @if (filtered.Count == 0)
+        {
+            <div class="vcb-surface p-5 text-center">
+                @if (quickTab == "mine" && string.IsNullOrWhiteSpace(searchText) && string.IsNullOrEmpty(filterDept))
+                {
+                    <div class="fw-semibold text-success mb-1" style="font-size: 15px;">
+                        🎉 Bạn đã hoàn thành tất cả hồ sơ cần xử lý!
+                    </div>
+                    <div class="text-muted small mb-3">Hiện không có hồ sơ hay chứng từ nào đang chờ thao tác của bạn.</div>
+                    <button type="button" class="btn btn-sm btn-outline-success rounded-pill px-3"
+                            @onclick='() => quickTab = "active"'>
+                        Xem hồ sơ đang theo dõi (@docs.Count(d => d.Status != "Completed"))
+                    </button>
+                }
+                else
+                {
+                    <span class="text-muted">Không có hồ sơ nào phù hợp điều kiện lọc hiện tại.</span>
+                }
+            </div>
+        }
+        else
+        {
+            var companyDocs = filtered.Where(d => d.CustomerType != "individual").ToList();
+            var individualDocs = filtered.Where(d => d.CustomerType == "individual").ToList();
+
+            @* PHẦN 1: KHÁCH HÀNG CÔNG TY *@
+            <div class="vcb-surface mb-4">
+                <div class="p-3 px-4 border-bottom d-flex justify-content-between align-items-center" style="background: #f8fbf9;">
+                    <div class="d-flex align-items-center gap-2">
+                        <span style="font-size: 16px;">🏢</span>
+                        <span class="fw-bold text-dark" style="font-size: 14.5px;">Khách hàng Công ty</span>
+                        <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle">@companyDocs.Count</span>
+                    </div>
+                    @if (companyDocs.Any(IsActionRequiredForMe))
+                    {
+                        <span class="badge rounded-pill bg-danger-subtle text-danger" style="font-size: 11.5px;">
+                            @companyDocs.Count(IsActionRequiredForMe) cần xử lý
+                        </span>
+                    }
+                </div>
+
+                @if (companyDocs.Count == 0)
+                {
+                    <div class="p-4 text-center text-muted small">Không có hồ sơ khách hàng Công ty trong mục này.</div>
+                }
+                else
+                {
+                    @RenderDocumentTable(companyDocs)
+                }
+            </div>
+
+            @* PHẦN 2: KHÁCH HÀNG CÁ NHÂN *@
+            <div class="vcb-surface">
+                <div class="p-3 px-4 border-bottom d-flex justify-content-between align-items-center" style="background: #f8fafc;">
+                    <div class="d-flex align-items-center gap-2">
+                        <span style="font-size: 16px;">👤</span>
+                        <span class="fw-bold text-dark" style="font-size: 14.5px;">Khách hàng Cá nhân</span>
+                        <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle">@individualDocs.Count</span>
+                    </div>
+                    @if (individualDocs.Any(IsActionRequiredForMe))
+                    {
+                        <span class="badge rounded-pill bg-danger-subtle text-danger" style="font-size: 11.5px;">
+                            @individualDocs.Count(IsActionRequiredForMe) cần xử lý
+                        </span>
+                    }
+                </div>
+
+                @if (individualDocs.Count == 0)
+                {
+                    <div class="p-4 text-center text-muted small">Không có hồ sơ khách hàng Cá nhân trong mục này.</div>
+                }
+                else
+                {
+                    @RenderDocumentTable(individualDocs)
+                }
+            </div>
+        }
     }
 }
 
@@ -496,9 +467,18 @@ else
             @* 1. Drawer Header Gradient *@
             <div class="vcb-drawer-header">
                 <button class="vcb-drawer-close" @onclick="Close">✕</button>
-                <div style="font-family: monospace; font-size: 12px; opacity: 0.85;">@selected.DocumentNumber</div>
+                <div class="d-flex align-items-center gap-2" style="font-family: monospace; font-size: 12px; opacity: 0.9;">
+                    <span>@selected.DocumentNumber</span>
+                    @if (!string.IsNullOrWhiteSpace(selected.CustomerCif))
+                    {
+                        <span>· CIF: @selected.CustomerCif</span>
+                    }
+                </div>
                 <h4 class="fw-bold mb-2 mt-1">@selected.CustomerName</h4>
                 <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="badge rounded-pill px-3 py-1" style="background: rgba(255,255,255,0.22); font-weight: 600;">
+                        @(selected.CustomerType == "individual" ? "👤 Cá nhân" : "🏢 Công ty")
+                    </span>
                     <span class="badge rounded-pill px-3 py-1" style="background: rgba(255,255,255,0.18); font-weight: 500;">
                         @selected.CurrentDepartmentName
                     </span>
@@ -545,16 +525,22 @@ else
                 <div class="vcb-surface p-3 mb-3 small">
                     <div class="row g-2">
                         <div class="col-md-6">
+                            <span class="text-muted">Mã CIF:</span> <b>@(string.IsNullOrWhiteSpace(selected.CustomerCif) ? "—" : selected.CustomerCif)</b>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted">Đối tượng:</span> <b>@(selected.CustomerType == "individual" ? "Khách hàng Cá nhân" : "Khách hàng Công ty")</b>
+                        </div>
+                        <div class="col-md-6">
                             <span class="text-muted">PKH khởi tạo:</span> <b>@(selected.CreatedByUserName ?? "—")</b>
                         </div>
                         <div class="col-md-6">
                             <span class="text-muted">Hạn thanh toán:</span> <b class="text-danger">@FormatDate(selected.DueDate)</b>
                         </div>
                         <div class="col-md-6">
-                            <span class="text-muted">PQLN thụ lý:</span> <b>@(selected.PqlnReceiverName ?? "Chưa nhận")</b>
+                            <span class="text-muted">PQLN xử lý:</span> <b>@(selected.PqlnReceiverName ?? "Chưa nhận")</b>
                         </div>
                         <div class="col-md-6">
-                            <span class="text-muted">PDV thụ lý:</span> <b>@(selected.PdvReceiverName ?? "Chưa nhận")</b>
+                            <span class="text-muted">PDV xử lý:</span> <b>@(selected.PdvReceiverName ?? "Chưa nhận")</b>
                         </div>
                     </div>
                 </div>
@@ -812,23 +798,53 @@ else
                     }
                 </div>
 
-                @* Luồng theo dõi lịch sử *@
-                <div class="fw-bold mb-2" style="font-size: 14.5px;">Luồng theo dõi</div>
-                <div class="vcb-surface p-3">
-                    @foreach (var h in selected.CirculationHistory)
-                    {
-                        <div class="small pb-2 mb-2 border-bottom">
-                            <div class="d-flex justify-content-between">
-                                <b>@h.PerformedByUserName</b>
-                                <span class="text-muted" style="font-size: 11.5px;">@FormatFullVnTime(h.CreatedAt)</span>
+                @* Luồng theo dõi lịch sử (Mới nhất lên trên cùng) *@
+                @{
+                    var orderedHistory = selected.CirculationHistory
+                        .OrderByDescending(x => x.CreatedAt)
+                        .ToList();
+                }
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-bold" style="font-size: 15px;">Luồng theo dõi</span>
+                    <span class="text-muted" style="font-size: 11.5px;">Mới nhất ở trên</span>
+                </div>
+
+                <div class="vcb-surface p-3 px-4">
+                    <div class="vcb-timeline">
+                        @for (int i = 0; i < orderedHistory.Count; i++)
+                        {
+                            var h = orderedHistory[i];
+                            var isLatest = i == 0;
+                            var deptFlow = FormatHistoryDeptFlow(h);
+
+                            <div class="vcb-tl-item @(isLatest ? "latest" : "")">
+                                <span class="vcb-tl-dot"></span>
+
+                                <div class="d-flex flex-wrap align-items-baseline gap-2">
+                                    <span class="vcb-tl-title">@FormatHistoryActionLabel(h)</span>
+                                    <span class="vcb-tl-time">@FormatFullVnTime(h.CreatedAt)</span>
+                                </div>
+
+                                @if (!string.IsNullOrWhiteSpace(h.Notes))
+                                {
+                                    <div class="vcb-tl-note">@h.Notes</div>
+                                }
+
+                                <div class="vcb-tl-meta">
+                                    <span>👤 @h.PerformedByUserName</span>
+                                    @if (!string.IsNullOrEmpty(deptFlow))
+                                    {
+                                        <span>·</span>
+                                        <span>@deptFlow</span>
+                                    }
+                                </div>
                             </div>
-                            <div class="text-muted mt-1">@h.Notes</div>
-                        </div>
-                    }
+                        }
+                    </div>
                 </div>
             </div>
 
-@* 3. Drawer Footer — Thanh thao tác cố định dưới đáy *@
+            @* 3. Drawer Footer — Thanh thao tác cố định dưới đáy *@
             <div class="vcb-drawer-footer">
                 @if (CanApprovePkh)
                 {
@@ -916,7 +932,8 @@ else
     bool showUsers;
 
     string newName = "",
-           newPhone = "",
+           newCif = "",
+           newCustomerType = "company",
            newIssue = DateTime.UtcNow.AddHours(7).ToString("yyyy-MM-dd"),
            newDue = DateTime.UtcNow.AddHours(7).AddDays(30).ToString("yyyy-MM-dd");
     bool newHasDebt;
@@ -929,13 +946,123 @@ else
     Guid? editingItemId;
     string editItemName = "";
 
+    // Bảng danh sách dùng chung cho cả 2 khu vực Công ty & Cá nhân
+    RenderFragment<List<DebtDocumentDto>> RenderDocumentTable => docList =>
+    @<div class="table-responsive">
+        <table class="table vcb-table mb-0">
+            <thead>
+                <tr>
+                    <th>HỒ SƠ / KHÁCH HÀNG</th>
+                    <th>NGƯỜI PHỤ TRÁCH</th>
+                    <th>PHÒNG & TRẠNG THÁI</th>
+                    <th>CHỨNG TỪ NỢ</th>
+                    <th>THỜI GIAN</th>
+                    <th class="text-end">THAO TÁC</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var d in docList)
+                {
+                    var actionLabel = GetMyActionLabel(d);
+                    var isMyTurn = actionLabel != null;
+                    var isOverdue = IsOverdue(d);
+                    var pct = d.TotalDebtItems == 0 ? 100 : (int)Math.Round(100.0 * d.SupplementedDebtItems / d.TotalDebtItems);
+
+                    <tr class="@(isMyTurn ? "vcb-row-action" : "")" style="cursor: pointer;" @onclick="() => ViewAsync(d.Id)">
+                        @* 1. Số VB + Khách hàng + CIF *@
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fw-semibold text-muted" style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;">
+                                    @d.DocumentNumber
+                                </span>
+                                @if (d.Priority is "high" or "urgent")
+                                {
+                                    <span class="badge bg-danger" style="font-size: 10.5px;">Khẩn</span>
+                                }
+                            </div>
+                            <div class="fw-bold mt-1" style="font-size: 14px;">
+                                @d.CustomerName
+                                @if (!string.IsNullOrWhiteSpace(d.CustomerCif))
+                                {
+                                    <span class="fw-normal text-muted" style="font-size: 12.5px;"> · CIF: @d.CustomerCif</span>
+                                }
+                            </div>
+                        </td>
+
+                        @* 2. Người phụ trách (Hồ sơ của ai) *@
+                        <td>
+                            <div class="fw-semibold" style="font-size: 13.5px;">
+                                @CurrentHandlerText(d)
+                            </div>
+                            <div class="text-muted mt-1" style="font-size: 12px;">
+                                Tạo PKH: @(d.CreatedByUserName ?? "—")
+                            </div>
+                        </td>
+
+                        @* 3. Phòng & Trạng thái *@
+                        <td>
+                            <div class="d-flex flex-wrap align-items-center gap-1">
+                                <span class="vcb-dept-pill">@d.CurrentDepartmentCode</span>
+                                <span class="vcb-status-pill @StatusPillClass(d.Status)">
+                                    <span class="dot"></span>
+                                    @StatusLabel(d.Status)
+                                </span>
+                            </div>
+                        </td>
+
+                        @* 4. Chứng từ nợ *@
+                        <td>
+                            @if (d.TotalDebtItems == 0)
+                            {
+                                <span class="text-muted small">Không có</span>
+                            }
+                            else
+                            {
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="vcb-progress-track">
+                                        <div class="vcb-progress-fill" style="width: @(pct)%;"></div>
+                                    </div>
+                                    <span class="small fw-semibold @(d.SupplementedDebtItems >= d.TotalDebtItems ? "text-success" : "text-muted")">
+                                        @d.SupplementedDebtItems/@d.TotalDebtItems
+                                    </span>
+                                </div>
+                            }
+                        </td>
+
+                        @* 5. Mốc thời gian *@
+                        <td style="font-size: 12.5px;">
+                            <div class="text-muted">CN: @FormatVnTime(d.UpdatedAt)</div>
+                            <div class="mt-1 @(isOverdue ? "text-danger fw-bold" : "text-muted")">
+                                Hạn: @FormatDate(d.DueDate) @(isOverdue ? "(Quá hạn)" : "")
+                            </div>
+                        </td>
+
+                        @* 6. Nút thao tác rõ nghĩa *@
+                        <td class="text-end">
+                            @if (isMyTurn)
+                            {
+                                <span class="badge rounded-pill px-3 py-2 text-white" style="background: #0a7a42; font-size: 12px;">
+                                    @actionLabel →
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-success fw-semibold small">Xem ›</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>;
+
     static readonly string[] StepLabels =
     [
         "Khởi tạo",
         "SUP PKH duyệt",
-        "PQLN thụ lý",
+        "PQLN đang xử lý",
         "SUP PQLN duyệt",
-        "PDV thụ lý",
+        "PDV đang xử lý",
         "SUP PDV duyệt",
         "Hoàn tất"
     ];
@@ -952,6 +1079,66 @@ else
         _ => 1
     };
 
+    string FormatHistoryActionLabel(CirculationHistoryDto h)
+    {
+        var note = (h.Notes ?? "").ToLower();
+        if (note.Contains("khởi tạo")) return "Khởi tạo";
+        if (note.Contains("sup pkh") || (note.Contains("sup duyệt") && note.Contains("khách hàng"))) return "SUP PKH duyệt";
+        if (note.Contains("sup duyệt")) return "SUP duyệt";
+        if (note.Contains("tiếp nhận") && note.Contains("pqln")) return "PQLN tiếp nhận";
+        if (note.Contains("tiếp nhận") && note.Contains("pdv")) return "PDV tiếp nhận";
+        if (note.Contains("gửi sup pqln") || note.Contains("trình sup pqln")) return "Trình SUP PQLN";
+        if (note.Contains("bút toán") && note.Contains("duyệt")) return "SUP PDV duyệt";
+        if (note.Contains("bút toán")) return "Đi bút toán";
+        if (note.Contains("hoàn tất")) return "Duyệt hoàn tất";
+        if (note.Contains("xác nhận") && note.Contains("chứng từ")) return "Xác nhận chứng từ";
+        if (note.Contains("bổ sung")) return "Bổ sung";
+        if (note.Contains("sửa tên chứng từ") || note.Contains("sửa chứng từ")) return "Sửa chứng từ";
+        if (note.Contains("xóa chứng từ")) return "Xóa chứng từ";
+        if (note.Contains("thêm chứng từ")) return "Thêm chứng từ";
+        return "Cập nhật hồ sơ";
+    }
+
+    string FormatHistoryDeptFlow(CirculationHistoryDto h)
+    {
+        var note = (h.Notes ?? "").ToLower();
+
+        if (note.Contains("khởi tạo")) return "Phòng Khách hàng";
+
+        // 2 bước duy nhất có mũi tên chuyển phòng
+        if (note.Contains("sup duyệt"))
+        {
+            var pkhApprovedAt = selected?.CirculationHistory
+                .Where(x => (x.Notes ?? "").ToLower().Contains("sup duyệt"))
+                .OrderBy(x => x.CreatedAt)
+                .FirstOrDefault()?.CreatedAt;
+
+            return pkhApprovedAt.HasValue && h.CreatedAt > pkhApprovedAt.Value
+                ? "Phòng Quản lý nợ → Phòng Dịch vụ khách hàng"
+                : "Phòng Khách hàng → Phòng Quản lý nợ";
+        }
+
+        // Các thao tác nội bộ tại từng phòng (không có mũi tên)
+        if (note.Contains("pqln")) return "Phòng Quản lý nợ";
+        if (note.Contains("pdv") || note.Contains("bút toán")) return "Phòng Dịch vụ khách hàng";
+
+        // Với các thao tác chung (Sửa/Xóa/Bổ sung...), xác định đúng phòng dựa theo mốc duyệt chuyển phòng trước đó
+        if (selected != null)
+        {
+            var supApprovals = selected.CirculationHistory
+                .Where(x => (x.Notes ?? "").ToLower().Contains("sup duyệt"))
+                .OrderBy(x => x.CreatedAt)
+                .ToList();
+
+            if (supApprovals.Count >= 2 && h.CreatedAt > supApprovals[1].CreatedAt)
+                return "Phòng Dịch vụ khách hàng";
+            if (supApprovals.Count >= 1 && h.CreatedAt > supApprovals[0].CreatedAt)
+                return "Phòng Quản lý nợ";
+        }
+
+        return "Phòng Khách hàng";
+    }
+
     string Dept => Session.CurrentUser?.DepartmentCode ?? "";
     string St => selected?.Status ?? "";
     bool R(string r) => Session.CurrentUser?.Role == r;
@@ -967,6 +1154,7 @@ else
             _ => true
         };
     }
+
     string GetFooterStatusHint(DebtDocumentDetailDto d) => d.Status switch
     {
         "PkhPendingSup" => "Đang chờ Lãnh đạo PKH (SUP PKH) phê duyệt",
@@ -980,6 +1168,7 @@ else
         "Completed" => "Hồ sơ đã hoàn tất toàn bộ quy trình",
         _ => "Hồ sơ đang ở bước xử lý khác"
     };
+
     bool CanApprovePkh => selected != null && Dept == "PKH" && R("manager") && St == "PkhPendingSup";
     bool CanReceivePqln => selected != null && Dept == "PQLN" && R("staff") && St == "PqlnPendingReceive";
     bool CanSubmitPqln => selected != null && Dept == "PQLN" && R("staff") && St == "PqlnReceived" && selected.PqlnReceiverId == Session.CurrentUser?.Id;
@@ -1093,6 +1282,7 @@ else
                 var q = searchText.Trim().ToLower();
                 var match = d.DocumentNumber.ToLower().Contains(q)
                          || d.CustomerName.ToLower().Contains(q)
+                         || (d.CustomerCif?.ToLower().Contains(q) ?? false)
                          || (d.CreatedByUserName?.ToLower().Contains(q) ?? false)
                          || (d.PqlnReceiverName?.ToLower().Contains(q) ?? false)
                          || (d.PdvReceiverName?.ToLower().Contains(q) ?? false);
@@ -1207,15 +1397,19 @@ else
 
     async Task CreateDoc()
     {
-        if (string.IsNullOrWhiteSpace(newName)) { createError = "Vui lòng nhập tên khách hàng"; return; }
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            createError = newCustomerType == "company" ? "Vui lòng nhập tên công ty" : "Vui lòng nhập họ và tên khách hàng";
+            return;
+        }
         try
         {
             var nowVn = DateTime.UtcNow.AddHours(7);
             await DocService.CreateAsync(new CreateDebtDocumentRequest
             {
-                CustomerName = newName,
-                CustomerPhone = newPhone,
-                CustomerType = "company",
+                CustomerName = newName.Trim(),
+                CustomerCif = string.IsNullOrWhiteSpace(newCif) ? null : newCif.Trim(),
+                CustomerType = newCustomerType,
                 IssueDate = newIssue,
                 DueDate = newDue,
                 Priority = "normal",
@@ -1224,7 +1418,8 @@ else
             }, Session.CurrentUser!.Id);
 
             newName = "";
-            newPhone = "";
+            newCif = "";
+            newCustomerType = "company";
             newIssue = nowVn.ToString("yyyy-MM-dd");
             newDue = nowVn.AddDays(30).ToString("yyyy-MM-dd");
             newItems.Clear();

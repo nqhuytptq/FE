@@ -10,7 +10,7 @@ public class DebtDocumentService(
     IUserRepository users) : IDebtDocumentService
 {
     // ===== Mapping =====
-private static bool IsItemCompleted(DebtItem x, Guid? pkhDeptId = null, Guid? pqlnDeptId = null)
+    private static bool IsItemCompleted(DebtItem x, Guid? pkhDeptId = null, Guid? pqlnDeptId = null)
     {
         if (!x.IsSupplemented) return false;
 
@@ -29,12 +29,14 @@ private static bool IsItemCompleted(DebtItem x, Guid? pkhDeptId = null, Guid? pq
     private static int SupplementedCount(DebtDocument d, Guid? pkhDeptId = null, Guid? pqlnDeptId = null)
         => d.DebtItems.Count(x => IsItemCompleted(x, pkhDeptId, pqlnDeptId));
 
-    private static int SupplementedCount(DebtDocument d, Guid? pkhDeptId = null)
-        => d.DebtItems.Count(x => IsItemCompleted(x, pkhDeptId));
+    private static string NormalizeCustomerType(string? raw)
+        => string.Equals(raw?.Trim(), "individual", StringComparison.OrdinalIgnoreCase)
+            ? "individual"
+            : "company";
 
-    private static DebtDocumentDto Map(DebtDocument d, Guid? pkhDeptId = null) => new(
-        d.Id, d.DocumentNumber, d.CustomerName, d.CustomerPhone,
-        d.CustomerType?.ToString().ToLower(),
+    private static DebtDocumentDto Map(DebtDocument d, Guid? pkhDeptId = null, Guid? pqlnDeptId = null) => new(
+        d.Id, d.DocumentNumber, d.CustomerName, d.CustomerCif,
+        NormalizeCustomerType(d.CustomerType),
         d.IssueDate.ToString("yyyy-MM-dd"), d.DueDate.ToString("yyyy-MM-dd"),
         d.CurrentDepartmentId, d.CurrentDepartment?.Name, d.CurrentDepartment?.Code,
         d.Status.ToString(), d.Priority.ToString().ToLower(),
@@ -43,10 +45,10 @@ private static bool IsItemCompleted(DebtItem x, Guid? pkhDeptId = null, Guid? pq
         d.PqlnReceiverId, d.PqlnReceiver?.Name, d.PqlnReceivedAt,
         d.PdvReceiverId, d.PdvReceiver?.Name, d.PdvReceivedAt,
         d.EntryPostedAt, d.CompletedAt,
-        d.DebtItems.Count, SupplementedCount(d, pkhDeptId),
+        d.DebtItems.Count, SupplementedCount(d, pkhDeptId, pqlnDeptId),
         d.CreatedAt, d.UpdatedAt);
 
-private static DebtItemDto Item(DebtItem x, string? pqlnVerifierName = null, string? pdvVerifierName = null) => new(
+    private static DebtItemDto Item(DebtItem x, string? pqlnVerifierName = null, string? pdvVerifierName = null) => new(
         x.Id, x.DebtDocumentId, x.ItemName, x.IsSupplemented,
         x.SupplementedAt, x.SupplementedByUserId, x.SupplementedByUser?.Name, x.Notes,
         x.SourceDepartmentId, x.SourceDepartment?.Name, x.SourceDepartment?.Code,
@@ -76,10 +78,40 @@ private static DebtItemDto Item(DebtItem x, string? pqlnVerifierName = null, str
     }
 
     /// <summary>Quyền xem hồ sơ: admin/manager xem toàn bộ; nhân viên chỉ xem hồ sơ của mình.</summary>
+/// <summary>Quyền xem hồ sơ: admin/SUP PKH xem toàn bộ; SUP PQLN xem hồ sơ từ khi chuyển sang PQLN; SUP PDV xem hồ sơ từ khi chuyển sang PDV; nhân viên chỉ xem hồ sơ của mình.</summary>
     private static bool CanView(AppUser user, Department? dept, DebtDocument d)
     {
-        if (user.Role is "admin" or "manager") return true;
+        if (user.Role == "admin") return true;
+
         var code = dept?.Code;
+        if (user.Role == "manager")
+        {
+            if (code == "PQLN")
+            {
+                return d.CurrentDepartmentId == dept?.Id
+                    || d.Status is DocumentStatus.PqlnPendingReceive
+                        or DocumentStatus.PqlnReceived
+                        or DocumentStatus.PqlnPendingSup
+                        or DocumentStatus.PdvPendingReceive
+                        or DocumentStatus.PdvReceived
+                        or DocumentStatus.PdvEntryPosted
+                        or DocumentStatus.PdvEntryApproved
+                        or DocumentStatus.Completed;
+            }
+
+            if (code == "PDV")
+            {
+                return d.CurrentDepartmentId == dept?.Id
+                    || d.Status is DocumentStatus.PdvPendingReceive
+                        or DocumentStatus.PdvReceived
+                        or DocumentStatus.PdvEntryPosted
+                        or DocumentStatus.PdvEntryApproved
+                        or DocumentStatus.Completed;
+            }
+
+            return true;
+        }
+
         if (code == "PKH") return d.CreatedByUserId == user.Id;
         if (code == "PQLN") return (d.CurrentDepartmentId == dept?.Id && d.Status == DocumentStatus.PqlnPendingReceive) || d.PqlnReceiverId == user.Id;
         if (code == "PDV") return (d.CurrentDepartmentId == dept?.Id && d.Status == DocumentStatus.PdvPendingReceive) || d.PdvReceiverId == user.Id;
@@ -102,9 +134,10 @@ private static DebtItemDto Item(DebtItem x, string? pqlnVerifierName = null, str
     {
         var (user, dept) = await GetActorAsync(currentUserId);
         var pkh = await departments.GetByCodeAsync("PKH");
+        var pqln = await departments.GetByCodeAsync("PQLN");
         var all = await docs.GetAllAsync(status, deptId, search);
         var visible = all.Where(d => CanView(user, dept, d)).ToList();
-        return visible.Select(d => Map(d, pkh?.Id)).ToList();
+        return visible.Select(d => Map(d, pkh?.Id, pqln?.Id)).ToList();
     }
 
     public async Task<DebtDocumentDetailDto?> GetByIdAsync(Guid id, Guid currentUserId)
@@ -115,11 +148,14 @@ private static DebtItemDto Item(DebtItem x, string? pqlnVerifierName = null, str
         if (!CanView(user, dept, d))
             throw new UnauthorizedAccessException("Bạn không có quyền xem hồ sơ này");
 
+        var verifierIds = d.DebtItems
+            .SelectMany(x => new[] { x.PqlnVerifiedByUserId, x.PdvVerifiedByUserId })
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct();
+
         var userNameCache = new Dictionary<Guid, string?>();
-        foreach (var verifierId in d.DebtItems
-            .Where(x => x.PqlnVerifiedByUserId.HasValue)
-            .Select(x => x.PqlnVerifiedByUserId!.Value)
-            .Distinct())
+        foreach (var verifierId in verifierIds)
         {
             var verifier = await users.GetByIdAsync(verifierId);
             userNameCache[verifierId] = verifier?.Name;
@@ -127,15 +163,18 @@ private static DebtItemDto Item(DebtItem x, string? pqlnVerifierName = null, str
 
         var mappedItems = d.DebtItems.Select(x =>
         {
-            string? verifierName = x.PqlnVerifiedByUserId.HasValue && userNameCache.TryGetValue(x.PqlnVerifiedByUserId.Value, out var name)
-                ? name
+            string? pqlnVerifierName = x.PqlnVerifiedByUserId.HasValue && userNameCache.TryGetValue(x.PqlnVerifiedByUserId.Value, out var pqlnName)
+                ? pqlnName
                 : null;
-            return Item(x, verifierName);
+            string? pdvVerifierName = x.PdvVerifiedByUserId.HasValue && userNameCache.TryGetValue(x.PdvVerifiedByUserId.Value, out var pdvName)
+                ? pdvName
+                : null;
+            return Item(x, pqlnVerifierName, pdvVerifierName);
         }).ToList();
 
         return new(
-            d.Id, d.DocumentNumber, d.CustomerName, d.CustomerPhone,
-            d.CustomerType?.ToString().ToLower(),
+            d.Id, d.DocumentNumber, d.CustomerName, d.CustomerCif,
+            NormalizeCustomerType(d.CustomerType),
             d.IssueDate.ToString("yyyy-MM-dd"), d.DueDate.ToString("yyyy-MM-dd"),
             d.CurrentDepartmentId, d.CurrentDepartment?.Name, d.CurrentDepartment?.Code,
             d.Status.ToString(), d.Priority.ToString().ToLower(),
@@ -159,19 +198,20 @@ private static DebtItemDto Item(DebtItem x, string? pqlnVerifierName = null, str
     {
         var pkh = await departments.GetByCodeAsync("PKH")
             ?? throw new InvalidOperationException("Không tìm thấy phòng ban PKH");
+        var pqln = await departments.GetByCodeAsync("PQLN");
         var nowVn = DateTime.UtcNow.AddHours(7);
 
         var d = new DebtDocument
         {
             DocumentNumber = $"VB-{nowVn:yyyy-MM-dd}-{Random.Shared.Next(100000, 1000000)}",
-            CustomerName = r.CustomerName,
-            CustomerPhone = r.CustomerPhone,
-            CustomerType = string.IsNullOrEmpty(r.CustomerType) ? null : Enum.Parse<CustomerType>(r.CustomerType, true),
+            CustomerName = r.CustomerName.Trim(),
+            CustomerCif = string.IsNullOrWhiteSpace(r.CustomerCif) ? null : r.CustomerCif.Trim(),
+            CustomerType = NormalizeCustomerType(r.CustomerType),
             IssueDate = DateOnly.FromDateTime(nowVn),
             DueDate = DateOnly.Parse(r.DueDate),
             CurrentDepartmentId = pkh.Id,
             Status = DocumentStatus.PkhPendingSup,
-            Priority = Enum.Parse<DocumentPriority>(r.Priority, true),
+            Priority = Enum.TryParse<DocumentPriority>(r.Priority, true, out var parsedPriority) ? parsedPriority : DocumentPriority.Normal,
             Notes = r.Notes,
             CreatedByUserId = uid
         };
@@ -202,22 +242,23 @@ private static DebtItemDto Item(DebtItem x, string? pqlnVerifierName = null, str
         await AddHistory(d.Id, null, pkh.Id, CirculationAction.Created,
             DocumentStatus.PkhPendingSup, uid, createNote);
 
-        return Map((await docs.GetByIdAsync(d.Id))!, pkh.Id);
+        return Map((await docs.GetByIdAsync(d.Id))!, pkh.Id, pqln?.Id);
     }
 
     public async Task<DebtDocumentDto> UpdateAsync(Guid id, UpdateDebtDocumentRequest r, Guid uid)
     {
         var (user, dept) = await GetActorAsync(uid);
         var pkh = await departments.GetByCodeAsync("PKH");
+        var pqln = await departments.GetByCodeAsync("PQLN");
         var d = await docs.GetByIdAsync(id) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
         if (!CanEdit(user, dept, d))
             throw new UnauthorizedAccessException("Bạn chỉ được sửa hồ sơ do chính mình khởi tạo hoặc tiếp nhận");
 
-        d.CustomerName = r.CustomerName;
-        d.CustomerPhone = r.CustomerPhone;
-        d.CustomerType = string.IsNullOrEmpty(r.CustomerType) ? null : Enum.Parse<CustomerType>(r.CustomerType, true);
+        d.CustomerName = r.CustomerName.Trim();
+        d.CustomerCif = string.IsNullOrWhiteSpace(r.CustomerCif) ? null : r.CustomerCif.Trim();
+        d.CustomerType = NormalizeCustomerType(r.CustomerType);
         d.DueDate = DateOnly.Parse(r.DueDate);
-        d.Priority = Enum.Parse<DocumentPriority>(r.Priority, true);
+        d.Priority = Enum.TryParse<DocumentPriority>(r.Priority, true, out var parsedPriority) ? parsedPriority : DocumentPriority.Normal;
         d.Notes = r.Notes;
         d.HasDebtDocuments = r.HasDebtDocuments;
 
@@ -236,7 +277,7 @@ private static DebtItemDto Item(DebtItem x, string? pqlnVerifierName = null, str
         }
 
         await docs.UpdateAsync(d);
-        return Map((await docs.GetByIdAsync(id))!, pkh?.Id);
+        return Map((await docs.GetByIdAsync(id))!, pkh?.Id, pqln?.Id);
     }
 
     private async Task ChangeDept(Guid id, Guid uid, string code, DocumentStatus status, CirculationAction action, string note)
@@ -304,16 +345,32 @@ private static DebtItemDto Item(DebtItem x, string? pqlnVerifierName = null, str
         await AddHistory(id, dept.Id, dept.Id, CirculationAction.PdvReceived, DocumentStatus.PdvReceived, u, "Cán bộ Giao dịch PDV đã tiếp nhận hồ sơ");
     }
 
-    public async Task PdvPostEntryAsync(Guid id, string? n, Guid u)
+public async Task PdvPostEntryAsync(Guid id, string? n, Guid u)
     {
-        var d = await docs.GetByIdAsync(id) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
+        var (user, dept) = await GetActorAsync(u);
+        if (dept?.Code != "PDV" || user.Role != "staff")
+            throw new UnauthorizedAccessException("Chỉ nhân viên phòng PDV mới có quyền đi bút toán.");
+
+        var d = await docs.GetByIdAsync(id)
+            ?? throw new InvalidOperationException("Hồ sơ không tồn tại.");
+
+        if (d.CurrentDepartmentId != dept.Id)
+            throw new InvalidOperationException("Hồ sơ hiện không nằm tại phòng PDV.");
+
+        if (d.Status != DocumentStatus.PdvReceived || d.PdvReceiverId != u)
+            throw new InvalidOperationException("Hồ sơ phải được chính bạn tiếp nhận trước khi thực hiện đi bút toán.");
+
         d.EntryPostedAt = DateTime.UtcNow;
         d.EntryPostedById = u;
         d.Status = DocumentStatus.PdvEntryPosted;
         await docs.UpdateAsync(d);
-        await AddHistory(id, d.CurrentDepartmentId, d.CurrentDepartmentId, CirculationAction.PdvEntryPosted, d.Status, u, n ?? "Cán bộ Giao dịch PDV đã thực hiện đi bút toán");
-    }
 
+        var note = string.IsNullOrWhiteSpace(n)
+            ? "Cán bộ Giao dịch PDV đã thực hiện đi bút toán"
+            : n.Trim();
+
+        await AddHistory(id, d.CurrentDepartmentId, d.CurrentDepartmentId, CirculationAction.PdvEntryPosted, d.Status, u, note);
+    }
     public async Task PdvSupApproveAsync(Guid id, string? n, Guid u)
     {
         var (user, dept) = await GetActorAsync(u);
@@ -330,7 +387,8 @@ private static DebtItemDto Item(DebtItem x, string? pqlnVerifierName = null, str
             throw new InvalidOperationException("Hồ sơ không ở trạng thái chờ SUP PDV phê duyệt.");
 
         var pkh = await departments.GetByCodeAsync("PKH");
-        var unsupItems = d.DebtItems.Where(x => !IsItemCompleted(x, pkh?.Id)).ToList();
+        var pqln = await departments.GetByCodeAsync("PQLN");
+        var unsupItems = d.DebtItems.Where(x => !IsItemCompleted(x, pkh?.Id, pqln?.Id)).ToList();
         var allSupplemented = unsupItems.Count == 0;
         var isDefaultUiNote = string.IsNullOrWhiteSpace(n)
             || n.Trim().Equals("SUP PDV kiểm tra và duyệt hoàn tất", StringComparison.OrdinalIgnoreCase);
@@ -373,7 +431,7 @@ private static DebtItemDto Item(DebtItem x, string? pqlnVerifierName = null, str
             // === DUYỆT LẦN 2: Duyệt hoàn tất cuối cùng ===
             if (!allSupplemented)
                 throw new InvalidOperationException(
-                    $"Không thể duyệt hoàn tất (Lần 2): Hồ sơ vẫn còn {unsupItems.Count} chứng từ nợ chưa bổ sung hoặc chưa được PQLN xác nhận.");
+                    $"Không thể duyệt hoàn tất (Lần 2): Hồ sơ vẫn còn {unsupItems.Count} chứng từ nợ chưa bổ sung hoặc chưa được xác nhận đủ.");
 
             d.Status = DocumentStatus.Completed;
             d.CompletedAt = DateTime.UtcNow;
@@ -604,6 +662,7 @@ private static DebtItemDto Item(DebtItem x, string? pqlnVerifierName = null, str
 
         await AddHistory(id, d.CurrentDepartmentId, d.CurrentDepartmentId, CirculationAction.Supplemented, d.Status, u, note);
     }
+
     public async Task VerifyPqlnSupplementItemsAsync(Guid id, VerifyPqlnSupplementItemsRequest r, Guid u)
     {
         var (user, dept) = await GetActorAsync(u);
@@ -653,6 +712,7 @@ private static DebtItemDto Item(DebtItem x, string? pqlnVerifierName = null, str
 
         await AddHistory(id, d.CurrentDepartmentId, d.CurrentDepartmentId, CirculationAction.Supplemented, d.Status, u, note);
     }
+
     public async Task PqlnTakeOwnershipAsync(Guid id, Guid u)
     {
         var (user, dept) = await GetActorAsync(u);

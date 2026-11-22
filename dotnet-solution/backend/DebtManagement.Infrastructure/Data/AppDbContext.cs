@@ -52,7 +52,7 @@ public class AppDbContext : DbContext
             e.Property(d => d.Id).HasColumnName("id");
             e.Property(d => d.DocumentNumber).HasColumnName("document_number").HasMaxLength(50);
             e.Property(d => d.CustomerName).HasColumnName("customer_name").HasMaxLength(200);
-            e.Property(d => d.CustomerPhone).HasColumnName("customer_phone").HasMaxLength(20);
+            e.Property(d => d.CustomerCif).HasColumnName("customer_cif").HasMaxLength(50);
             e.Property(d => d.CustomerType).HasColumnName("customer_type")
              .HasConversion<string?>().HasMaxLength(20);
             e.Property(d => d.IssueDate).HasColumnName("issue_date");
@@ -118,7 +118,7 @@ public class AppDbContext : DbContext
              .HasForeignKey(i => i.SupplementedByUserId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne<AppUser>().WithMany()
              .HasForeignKey(i => i.PqlnVerifiedByUserId).OnDelete(DeleteBehavior.SetNull);
-             e.HasOne<AppUser>().WithMany()
+            e.HasOne<AppUser>().WithMany()
              .HasForeignKey(i => i.PdvVerifiedByUserId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(i => i.SourceDepartment).WithMany()
              .HasForeignKey(i => i.SourceDepartmentId).OnDelete(DeleteBehavior.SetNull);

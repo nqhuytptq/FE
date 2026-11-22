@@ -37,7 +37,7 @@ public record AddDebtItemsRequest(List<CreateDebtItemRequest> Items, string? Not
 public record UpdateDebtItemRequest(string ItemName, string? Notes);
 
 public record DebtDocumentDto(
-    Guid Id, string DocumentNumber, string CustomerName, string? CustomerPhone, string? CustomerType,
+    Guid Id, string DocumentNumber, string CustomerName, string? CustomerCif, string? CustomerType,
     string IssueDate, string DueDate,
     Guid? CurrentDepartmentId, string? CurrentDepartmentName, string? CurrentDepartmentCode,
     string Status, string Priority, string? Notes,
@@ -50,7 +50,7 @@ public record DebtDocumentDto(
     DateTime CreatedAt, DateTime UpdatedAt);
 
 public record DebtDocumentDetailDto(
-    Guid Id, string DocumentNumber, string CustomerName, string? CustomerPhone, string? CustomerType,
+    Guid Id, string DocumentNumber, string CustomerName, string? CustomerCif, string? CustomerType,
     string IssueDate, string DueDate,
     Guid? CurrentDepartmentId, string? CurrentDepartmentName, string? CurrentDepartmentCode,
     string Status, string Priority, string? Notes,
@@ -86,8 +86,8 @@ public class CreateDebtItemRequest
 public class CreateDebtDocumentRequest
 {
     public string CustomerName { get; set; } = string.Empty;
-    public string? CustomerPhone { get; set; }
-    public string? CustomerType { get; set; }
+    public string? CustomerCif { get; set; }
+    public string CustomerType { get; set; } = "company";
     public string IssueDate { get; set; } = string.Empty;
     public string DueDate { get; set; } = string.Empty;
     public string Priority { get; set; } = "normal";
@@ -99,7 +99,7 @@ public class CreateDebtDocumentRequest
 public class UpdateDebtDocumentRequest
 {
     public string CustomerName { get; set; } = string.Empty;
-    public string? CustomerPhone { get; set; }
+    public string? CustomerCif { get; set; }
     public string? CustomerType { get; set; }
     public string IssueDate { get; set; } = string.Empty;
     public string DueDate { get; set; } = string.Empty;

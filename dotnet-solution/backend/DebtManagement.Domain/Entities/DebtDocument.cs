@@ -35,8 +35,8 @@ public class DebtDocument
     public Guid Id { get; set; } = Guid.NewGuid();
     public string DocumentNumber { get; set; } = string.Empty;
     public string CustomerName { get; set; } = string.Empty;
-    public string? CustomerPhone { get; set; }
-    public CustomerType? CustomerType { get; set; }
+public string? CustomerCif { get; set; }
+public string CustomerType { get; set; } = "company"; // "company" | "individual"
     public DateOnly IssueDate { get; set; }
     public DateOnly DueDate { get; set; }
     public Guid? CurrentDepartmentId { get; set; }

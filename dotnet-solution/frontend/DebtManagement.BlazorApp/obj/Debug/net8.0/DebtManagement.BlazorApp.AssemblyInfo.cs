@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("DebtManagement.BlazorApp")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+49848ebd2921ee9cce77062aa7afd32c4b64f8c3")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6051adf6afad51cfbee740552d3a2cd3596b5eb6")]
 [assembly: System.Reflection.AssemblyProductAttribute("DebtManagement.BlazorApp")]
 [assembly: System.Reflection.AssemblyTitleAttribute("DebtManagement.BlazorApp")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

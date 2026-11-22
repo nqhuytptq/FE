@@ -15,4 +15,3 @@ public interface IUserService
     Task<AppUserDto> CreateAsync(CreateUserRequest request);
     Task<AppUserDto> UpdateAsync(Guid id, UpdateUserRequest request);
 }
-
