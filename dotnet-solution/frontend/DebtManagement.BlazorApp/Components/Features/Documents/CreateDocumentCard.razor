@@ -1,0 +1,143 @@
+@using DebtManagement.Shared.DTOs
+@using DebtManagement.Application.Interfaces
+@inject BlazorSession Session
+@inject IDebtDocumentService DocService
+
+<div class="vcb-surface p-4 mb-4 border-success">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold text-success mb-0">Khởi tạo hồ sơ văn bản nợ mới</h6>
+        <button class="btn btn-sm btn-light" @onclick="() => OnCancel.InvokeAsync()">✕</button>
+    </div>
+    @if (createError != null)
+    {
+        <div class="alert alert-danger py-2 small">@createError</div>
+    }
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-5">
+            <label class="form-label small fw-semibold mb-1">Đối tượng khách hàng <span class="text-danger">*</span></label>
+            <div class="d-flex gap-2">
+                <button type="button"
+                        class="btn btn-sm px-3 fw-semibold rounded-3 @(newCustomerType == "company" ? "btn-success" : "btn-outline-secondary")"
+                        @onclick='() => newCustomerType = "company"'>
+                    🏢 Công ty
+                </button>
+                <button type="button"
+                        class="btn btn-sm px-3 fw-semibold rounded-3 @(newCustomerType == "individual" ? "btn-success" : "btn-outline-secondary")"
+                        @onclick='() => newCustomerType = "individual"'>
+                    👤 Cá nhân
+                </button>
+            </div>
+        </div>
+
+        <div class="col-md-7">
+            <label class="form-label small fw-semibold mb-1">Luồng xử lý hồ sơ <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button"
+                        class="btn btn-sm px-3 fw-semibold rounded-3 @(newWorkflowType == "pkh_pqln_pdv" ? "btn-success" : "btn-outline-secondary")"
+                        @onclick='() => newWorkflowType = "pkh_pqln_pdv"'>
+                    🔁 Tiêu chuẩn (PKH → PQLN → PDV)
+                </button>
+                <button type="button"
+                        class="btn btn-sm px-3 fw-semibold rounded-3 @(newWorkflowType == "pkh_pdv" ? "btn-primary" : "btn-outline-secondary")"
+                        @onclick='() => newWorkflowType = "pkh_pdv"'>
+                    ⚡ Chuyển thẳng PDV (PKH → PDV)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-4">
+            <label class="form-label small fw-semibold mb-1">
+                @(newCustomerType == "company" ? "Tên công ty / doanh nghiệp" : "Họ và tên khách hàng") <span class="text-danger">*</span>
+            </label>
+            <input class="form-control" @bind="newName"
+                   placeholder="@(newCustomerType == "company" ? "Nhập tên công ty..." : "Nhập họ và tên khách hàng...")" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small fw-semibold mb-1">Mã CIF</label>
+            <input class="form-control" @bind="newCif" placeholder="Nhập mã CIF..." />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold mb-1">Ngày phát sinh</label>
+            <input class="form-control" @bind="newIssue" disabled />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small fw-semibold mb-1">Hạn thanh toán</label>
+            <input class="form-control" @bind="newDue" placeholder="yyyy-MM-dd" />
+        </div>
+    </div>
+
+    <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" @bind="newHasDebt" id="hd" />
+        <label class="form-check-label fw-semibold small" for="hd">Có chứng từ nợ kèm theo</label>
+    </div>
+    @if (newHasDebt)
+    {
+        @foreach (var it in newItems)
+        {
+            <div class="input-group input-group-sm mb-2" style="max-width: 520px;">
+                <input class="form-control" @bind="it.ItemName" placeholder="Nhập tên chứng từ nợ..." />
+                <button class="btn btn-outline-danger" @onclick="() => newItems.Remove(it)">Xóa</button>
+            </div>
+        }
+        <button class="btn btn-sm btn-outline-success mb-2" @onclick="() => newItems.Add(new CreateDebtItemRequest())">+ Thêm chứng từ nợ</button>
+    }
+    <div class="mt-2 d-flex gap-2">
+        <button class="vcb-btn-primary px-4" style="height: 38px;" @onclick="CreateDocAsync">Lưu & Gửi SUP PKH</button>
+        <button class="btn btn-light border" @onclick="() => OnCancel.InvokeAsync()">Hủy</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnCreated { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    string newName = "";
+    string newCif = "";
+    string newCustomerType = "company";
+    string newWorkflowType = "pkh_pqln_pdv";
+    string newIssue = DateTime.UtcNow.AddHours(7).ToString("yyyy-MM-dd");
+    string newDue = DateTime.UtcNow.AddHours(7).AddDays(30).ToString("yyyy-MM-dd");
+    bool newHasDebt;
+    List<CreateDebtItemRequest> newItems = new();
+    string? createError;
+
+    async Task CreateDocAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            createError = newCustomerType == "company" ? "Vui lòng nhập tên công ty" : "Vui lòng nhập họ và tên khách hàng";
+            return;
+        }
+        try
+        {
+            var nowVn = DateTime.UtcNow.AddHours(7);
+            await DocService.CreateAsync(new CreateDebtDocumentRequest
+            {
+                CustomerName = newName.Trim(),
+                CustomerCif = string.IsNullOrWhiteSpace(newCif) ? null : newCif.Trim(),
+                CustomerType = newCustomerType,
+                WorkflowType = newWorkflowType,
+                IssueDate = newIssue,
+                DueDate = newDue,
+                Priority = "normal",
+                HasDebtDocuments = newHasDebt,
+                DebtItems = newItems
+            }, Session.CurrentUser!.Id);
+
+            newName = "";
+            newCif = "";
+            newCustomerType = "company";
+            newWorkflowType = "pkh_pqln_pdv";
+            newIssue = nowVn.ToString("yyyy-MM-dd");
+            newDue = nowVn.AddDays(30).ToString("yyyy-MM-dd");
+            newItems.Clear();
+            newHasDebt = false;
+            createError = null;
+            await OnCreated.InvokeAsync();
+        }
+        catch (Exception e) { createError = e.Message; }
+    }
+}

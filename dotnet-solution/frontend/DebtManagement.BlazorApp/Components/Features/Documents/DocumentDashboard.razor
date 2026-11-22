@@ -1,0 +1,524 @@
+@using DebtManagement.Shared.DTOs
+@using static DebtManagement.BlazorApp.Models.DebtUiHelpers
+@inject BlazorSession Session
+
+<div class="mb-3">
+    <h4 class="fw-bold mb-1" style="letter-spacing: -0.3px;">Quản lý hồ sơ văn bản nợ</h4>
+    <p class="text-muted small mb-0">Theo dõi tiến độ phê duyệt, tiếp nhận và bổ sung chứng từ nợ liên phòng ban.</p>
+</div>
+
+@if (ShowCreateModal && Session.CurrentUser?.DepartmentCode == "PKH" && Session.CurrentUser?.Role == "staff")
+{
+    <CreateDocumentCard OnCreated="HandleDocumentCreatedAsync"
+                        OnCancel="() => ShowCreateModalChanged.InvokeAsync(false)" />
+}
+
+@* 4 Thẻ KPI tương tác *@
+<div class="vcb-kpi-grid-compact">
+    <button type="button"
+            class="vcb-kpi-btn @(QuickTab == "all" && string.IsNullOrEmpty(FilterStatus) ? "active" : "")"
+            @onclick='() => SetFilterStateAsync("all", "")'>
+        <div>
+            <div class="kpi-num">@Docs.Count</div>
+            <div class="kpi-lbl">Tổng hồ sơ</div>
+        </div>
+        <div class="kpi-ico" style="background: #eaf5ee; color: #0a7a42;">📁</div>
+    </button>
+
+    <button type="button"
+            class="vcb-kpi-btn @(QuickTab == "active" && string.IsNullOrEmpty(FilterStatus) ? "active" : "")"
+            @onclick='() => SetFilterStateAsync("active", "")'>
+        <div>
+            <div class="kpi-num">@Docs.Count(d => d.Status != "Completed")</div>
+            <div class="kpi-lbl">Đang xử lý</div>
+        </div>
+        <div class="kpi-ico" style="background: #eaf1fd; color: #1d63d0;">⏱</div>
+    </button>
+
+    <button type="button"
+            class="vcb-kpi-btn @(QuickTab == "completed" ? "active" : "")"
+            @onclick='() => SetFilterStateAsync("completed", "")'>
+        <div>
+            <div class="kpi-num">@Docs.Count(d => d.Status == "Completed")</div>
+            <div class="kpi-lbl">Hoàn tất</div>
+        </div>
+        <div class="kpi-ico" style="background: #e6f7ed; color: #0e8a4a;">✓</div>
+    </button>
+
+    <button type="button"
+            class="vcb-kpi-btn @(FilterStatus == "supplement" ? "active" : "")"
+            @onclick='() => SetFilterStateAsync("all", "supplement")'>
+        <div>
+            <div class="kpi-num">@Docs.Sum(d => Math.Max(0, d.TotalDebtItems - d.SupplementedDebtItems))</div>
+            <div class="kpi-lbl">Chứng từ còn thiếu</div>
+        </div>
+        <div class="kpi-ico" style="background: #fef5e4; color: #c77c08;">!</div>
+    </button>
+</div>
+
+@* Thanh tìm kiếm & Tab lọc *@
+<div class="vcb-surface mb-3">
+    <div class="p-3 px-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+            <div class="d-flex align-items-center gap-2">
+                <span class="fw-bold" style="font-size: 15.5px;">Danh sách hồ sơ</span>
+                <span class="badge rounded-pill bg-light text-dark border">@FilteredDocs.Count</span>
+            </div>
+
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <div class="vcb-input-wrap" style="width: 245px;">
+                    <span class="vcb-input-icon" style="font-size: 13px;">🔍</span>
+                    <input class="vcb-input" style="height: 35px; font-size: 13px;"
+                           @bind="searchText" @bind:event="oninput"
+                           placeholder="Tìm số VB, CIF, khách hàng..." />
+                </div>
+
+                <select class="form-select form-select-sm rounded-3" style="width: 132px; height: 35px;" @bind="filterDept">
+                    <option value="">Tất cả phòng</option>
+                    <option value="PKH">PKH</option>
+                    <option value="PQLN">PQLN</option>
+                    <option value="PDV">PDV</option>
+                </select>
+
+                <select class="form-select form-select-sm rounded-3" style="width: 162px; height: 35px;"
+                        value="@FilterStatus"
+                        @onchange="OnFilterStatusChanged">
+                    <option value="">Mọi trạng thái</option>
+                    <option value="pending">Chờ duyệt / nhận</option>
+                    <option value="processing">Đang thụ lý</option>
+                    <option value="supplement">Chờ bổ sung CT</option>
+                    <option value="completed">Hoàn tất</option>
+                </select>
+
+                <button class="btn btn-sm bg-white border rounded-3 px-2" style="height: 35px;" title="Làm mới dữ liệu"
+                        @onclick="() => OnReloadRequested.InvokeAsync()">
+                    ↻
+                </button>
+            </div>
+        </div>
+
+        <div class="vcb-tabs">
+            <button type="button" class="vcb-tab-btn @(QuickTab == "mine" ? "active" : "")"
+                    @onclick='() => SetFilterStateAsync("mine", "")'>
+                <span>Cần tôi xử lý</span>
+                @if (MyActionCount > 0)
+                {
+                    <span class="badge rounded-pill bg-danger" style="font-size: 11px;">@MyActionCount</span>
+                }
+                else
+                {
+                    <span class="badge rounded-pill bg-secondary-subtle text-dark" style="font-size: 11px;">0</span>
+                }
+            </button>
+
+            <button type="button" class="vcb-tab-btn @(QuickTab == "active" && string.IsNullOrEmpty(FilterStatus) ? "active" : "")"
+                    @onclick='() => SetFilterStateAsync("active", "")'>
+                <span>Đang xử lý</span>
+                <span class="badge rounded-pill bg-secondary-subtle text-dark" style="font-size: 11px;">@Docs.Count(d => d.Status != "Completed")</span>
+            </button>
+
+            <button type="button" class="vcb-tab-btn @(QuickTab == "completed" ? "active" : "")"
+                    @onclick='() => SetFilterStateAsync("completed", "")'>
+                <span>Hoàn tất</span>
+                <span class="badge rounded-pill bg-secondary-subtle text-dark" style="font-size: 11px;">@Docs.Count(d => d.Status == "Completed")</span>
+            </button>
+
+            <button type="button" class="vcb-tab-btn @(QuickTab == "all" && string.IsNullOrEmpty(FilterStatus) ? "active" : "")"
+                    @onclick='() => SetFilterStateAsync("all", "")'>
+                <span>Tất cả</span>
+                <span class="badge rounded-pill bg-secondary-subtle text-dark" style="font-size: 11px;">@Docs.Count</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+@* Phân tách 2 phần: Công ty & Cá nhân *@
+@if (FilteredDocs.Count == 0)
+{
+    <div class="vcb-surface p-5 text-center">
+        @if (QuickTab == "mine" && string.IsNullOrWhiteSpace(searchText) && string.IsNullOrEmpty(filterDept))
+        {
+            <div class="fw-semibold text-success mb-1" style="font-size: 15px;">
+                🎉 Bạn đã hoàn thành tất cả hồ sơ cần xử lý!
+            </div>
+            <div class="text-muted small mb-3">Hiện không có hồ sơ hay chứng từ nào đang chờ thao tác của bạn.</div>
+            <button type="button" class="btn btn-sm btn-outline-success rounded-pill px-3"
+                    @onclick='() => QuickTabChanged.InvokeAsync("active")'>
+                Xem hồ sơ đang theo dõi (@Docs.Count(d => d.Status != "Completed"))
+            </button>
+        }
+        else
+        {
+            <span class="text-muted">Không có hồ sơ nào phù hợp điều kiện lọc hiện tại.</span>
+        }
+    </div>
+}
+else
+{
+    var companyDocs = FilteredDocs.Where(d => d.CustomerType != "individual").ToList();
+    var individualDocs = FilteredDocs.Where(d => d.CustomerType == "individual").ToList();
+
+    var companyTotalPages = Math.Max(1, (int)Math.Ceiling((double)companyDocs.Count / companyPageSize));
+    var safeCompanyPage = Math.Min(Math.Max(1, companyDocPage), companyTotalPages);
+    var pagedCompanyDocs = companyDocs.Skip((safeCompanyPage - 1) * companyPageSize).Take(companyPageSize).ToList();
+
+    var indTotalPages = Math.Max(1, (int)Math.Ceiling((double)individualDocs.Count / individualPageSize));
+    var safeIndPage = Math.Min(Math.Max(1, individualDocPage), indTotalPages);
+    var pagedIndDocs = individualDocs.Skip((safeIndPage - 1) * individualPageSize).Take(individualPageSize).ToList();
+
+    @* PHẦN 1: KHÁCH HÀNG CÔNG TY *@
+    <div class="vcb-surface mb-4">
+        <div class="p-3 px-4 border-bottom d-flex justify-content-between align-items-center" style="background: #f8fbf9;">
+            <div class="d-flex align-items-center gap-2">
+                <span style="font-size: 16px;">🏢</span>
+                <span class="fw-bold text-dark" style="font-size: 14.5px;">Khách hàng Công ty</span>
+                <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle">@companyDocs.Count</span>
+            </div>
+            @if (companyDocs.Any(IsForMe))
+            {
+                <span class="badge rounded-pill bg-danger-subtle text-danger" style="font-size: 11.5px;">
+                    @companyDocs.Count(IsForMe) cần xử lý
+                </span>
+            }
+        </div>
+
+        @if (companyDocs.Count == 0)
+        {
+            <div class="p-4 text-center text-muted small">Không có hồ sơ khách hàng Công ty trong mục này.</div>
+        }
+        else
+        {
+            @RenderDocumentTable(pagedCompanyDocs)
+
+            var cStart = (safeCompanyPage - 1) * companyPageSize + 1;
+            var cEnd = Math.Min(safeCompanyPage * companyPageSize, companyDocs.Count);
+            <div class="px-4 py-2 border-top d-flex flex-wrap justify-content-between align-items-center gap-2"
+                 style="font-size: 12.5px; background: #fcfcfd;">
+                <div class="d-flex align-items-center gap-2 text-muted">
+                    <span>Hiển thị <b>@cStart–@cEnd</b> / <b>@companyDocs.Count</b> hồ sơ</span>
+                    <span>·</span>
+                    <select class="form-select form-select-sm"
+                            style="width: 112px; border-radius: 8px; font-size: 12.5px;"
+                            value="@companyPageSize"
+                            @onchange="OnCompanyPageSizeChanged">
+                        @foreach (var opt in PageSizeOptions)
+                        {
+                            <option value="@opt">@opt / trang</option>
+                        }
+                    </select>
+                </div>
+
+                @if (companyTotalPages > 1)
+                {
+                    <div class="d-flex align-items-center gap-1">
+                        <button type="button" class="btn btn-sm bg-white border rounded-3 px-2"
+                                disabled="@(safeCompanyPage <= 1)"
+                                @onclick="() => companyDocPage = safeCompanyPage - 1">
+                            ‹ Trước
+                        </button>
+                        @foreach (var p in GetVisiblePages(safeCompanyPage, companyTotalPages))
+                        {
+                            if (p == null)
+                            {
+                                <span class="px-1 text-muted">…</span>
+                            }
+                            else
+                            {
+                                var pageNum = p.Value;
+                                <button type="button"
+                                        class="btn btn-sm rounded-3 px-2 fw-semibold @(pageNum == safeCompanyPage ? "text-white" : "bg-white border text-dark")"
+                                        style="@(pageNum == safeCompanyPage ? "background: #046c3d; min-width: 30px;" : "min-width: 30px;")"
+                                        @onclick="() => companyDocPage = pageNum">
+                                    @pageNum
+                                </button>
+                            }
+                        }
+                        <button type="button" class="btn btn-sm bg-white border rounded-3 px-2"
+                                disabled="@(safeCompanyPage >= companyTotalPages)"
+                                @onclick="() => companyDocPage = safeCompanyPage + 1">
+                            Sau ›
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    @* PHẦN 2: KHÁCH HÀNG CÁ NHÂN *@
+    <div class="vcb-surface">
+        <div class="p-3 px-4 border-bottom d-flex justify-content-between align-items-center" style="background: #f8fafc;">
+            <div class="d-flex align-items-center gap-2">
+                <span style="font-size: 16px;">👤</span>
+                <span class="fw-bold text-dark" style="font-size: 14.5px;">Khách hàng Cá nhân</span>
+                <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle">@individualDocs.Count</span>
+            </div>
+            @if (individualDocs.Any(IsForMe))
+            {
+                <span class="badge rounded-pill bg-danger-subtle text-danger" style="font-size: 11.5px;">
+                    @individualDocs.Count(IsForMe) cần xử lý
+                </span>
+            }
+        </div>
+
+        @if (individualDocs.Count == 0)
+        {
+            <div class="p-4 text-center text-muted small">Không có hồ sơ khách hàng Cá nhân trong mục này.</div>
+        }
+        else
+        {
+            @RenderDocumentTable(pagedIndDocs)
+
+            var iStart = (safeIndPage - 1) * individualPageSize + 1;
+            var iEnd = Math.Min(safeIndPage * individualPageSize, individualDocs.Count);
+            <div class="px-4 py-2 border-top d-flex flex-wrap justify-content-between align-items-center gap-2"
+                 style="font-size: 12.5px; background: #fcfcfd;">
+                <div class="d-flex align-items-center gap-2 text-muted">
+                    <span>Hiển thị <b>@iStart–@iEnd</b> / <b>@individualDocs.Count</b> hồ sơ</span>
+                    <span>·</span>
+                    <select class="form-select form-select-sm"
+                            style="width: 112px; border-radius: 8px; font-size: 12.5px;"
+                            value="@individualPageSize"
+                            @onchange="OnIndividualPageSizeChanged">
+                        @foreach (var opt in PageSizeOptions)
+                        {
+                            <option value="@opt">@opt / trang</option>
+                        }
+                    </select>
+                </div>
+
+                @if (indTotalPages > 1)
+                {
+                    <div class="d-flex align-items-center gap-1">
+                        <button type="button" class="btn btn-sm bg-white border rounded-3 px-2"
+                                disabled="@(safeIndPage <= 1)"
+                                @onclick="() => individualDocPage = safeIndPage - 1">
+                            ‹ Trước
+                        </button>
+                        @foreach (var p in GetVisiblePages(safeIndPage, indTotalPages))
+                        {
+                            if (p == null)
+                            {
+                                <span class="px-1 text-muted">…</span>
+                            }
+                            else
+                            {
+                                var pageNum = p.Value;
+                                <button type="button"
+                                        class="btn btn-sm rounded-3 px-2 fw-semibold @(pageNum == safeIndPage ? "text-white" : "bg-white border text-dark")"
+                                        style="@(pageNum == safeIndPage ? "background: #046c3d; min-width: 30px;" : "min-width: 30px;")"
+                                        @onclick="() => individualDocPage = pageNum">
+                                    @pageNum
+                                </button>
+                            }
+                        }
+                        <button type="button" class="btn btn-sm bg-white border rounded-3 px-2"
+                                disabled="@(safeIndPage >= indTotalPages)"
+                                @onclick="() => individualDocPage = safeIndPage + 1">
+                            Sau ›
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public List<DebtDocumentDto> Docs { get; set; } = new();
+    [Parameter] public bool ShowCreateModal { get; set; }
+    [Parameter] public EventCallback<bool> ShowCreateModalChanged { get; set; }
+    [Parameter] public string QuickTab { get; set; } = "mine";
+    [Parameter] public EventCallback<string> QuickTabChanged { get; set; }
+    [Parameter] public string FilterStatus { get; set; } = "";
+    [Parameter] public EventCallback<string> FilterStatusChanged { get; set; }
+    [Parameter] public EventCallback OnReloadRequested { get; set; }
+    [Parameter] public EventCallback<Guid> OnSelectDocument { get; set; }
+
+    string searchText = "";
+    string filterDept = "";
+    int companyDocPage = 1;
+    int companyPageSize = 10;
+    int individualDocPage = 1;
+    int individualPageSize = 10;
+
+    string? MyActionText(DebtDocumentDto d)
+        => GetMyActionLabel(d, Session.CurrentUser?.Id, Session.CurrentUser?.DepartmentCode, Session.CurrentUser?.Role);
+
+    bool IsForMe(DebtDocumentDto d) => MyActionText(d) != null;
+    int MyActionCount => Docs.Count(IsForMe);
+
+    List<DebtDocumentDto> FilteredDocs => Docs
+        .Where(d =>
+        {
+            if (QuickTab == "mine" && !IsForMe(d)) return false;
+            if (QuickTab == "active" && d.Status == "Completed") return false;
+            if (QuickTab == "completed" && d.Status != "Completed") return false;
+
+            if (!string.IsNullOrEmpty(filterDept) && d.CurrentDepartmentCode != filterDept) return false;
+
+            if (FilterStatus == "pending" && d.Status is not ("PkhPendingSup" or "PqlnPendingReceive" or "PqlnPendingSup" or "PdvPendingReceive")) return false;
+            if (FilterStatus == "processing" && d.Status is not ("PqlnReceived" or "PdvReceived" or "PdvEntryPosted")) return false;
+            if (FilterStatus == "supplement" && !(d.TotalDebtItems > d.SupplementedDebtItems)) return false;
+            if (FilterStatus == "completed" && d.Status != "Completed") return false;
+
+            if (!string.IsNullOrWhiteSpace(searchText))
+            {
+                var q = searchText.Trim().ToLower();
+                var match = d.DocumentNumber.ToLower().Contains(q)
+                         || d.CustomerName.ToLower().Contains(q)
+                         || (d.CustomerCif?.ToLower().Contains(q) ?? false)
+                         || (d.CreatedByUserName?.ToLower().Contains(q) ?? false)
+                         || (d.PqlnReceiverName?.ToLower().Contains(q) ?? false)
+                         || (d.PdvReceiverName?.ToLower().Contains(q) ?? false);
+                if (!match) return false;
+            }
+            return true;
+        })
+        .OrderByDescending(IsForMe)
+        .ThenByDescending(d => d.UpdatedAt)
+        .ToList();
+
+    async Task SetFilterStateAsync(string tab, string status)
+    {
+        await QuickTabChanged.InvokeAsync(tab);
+        await FilterStatusChanged.InvokeAsync(status);
+    }
+
+    async Task OnFilterStatusChanged(ChangeEventArgs e)
+    {
+        await FilterStatusChanged.InvokeAsync(e.Value?.ToString() ?? "");
+    }
+
+    async Task HandleDocumentCreatedAsync()
+    {
+        await ShowCreateModalChanged.InvokeAsync(false);
+        await OnReloadRequested.InvokeAsync();
+    }
+
+    void OnCompanyPageSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var size) && size > 0)
+        {
+            companyPageSize = size;
+            companyDocPage = 1;
+        }
+    }
+
+    void OnIndividualPageSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var size) && size > 0)
+        {
+            individualPageSize = size;
+            individualDocPage = 1;
+        }
+    }
+
+    RenderFragment<List<DebtDocumentDto>> RenderDocumentTable => docList =>
+    @<div class="table-responsive">
+        <table class="table vcb-table mb-0">
+            <thead>
+                <tr>
+                    <th>HỒ SƠ / KHÁCH HÀNG</th>
+                    <th>NGƯỜI PHỤ TRÁCH</th>
+                    <th>PHÒNG & TRẠNG THÁI</th>
+                    <th>CHỨNG TỪ NỢ</th>
+                    <th>THỜI GIAN</th>
+                    <th class="text-end">THAO TÁC</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var d in docList)
+                {
+                    var actionLabel = MyActionText(d);
+                    var isMyTurn = actionLabel != null;
+                    var isOverdue = IsOverdue(d);
+                    var pct = d.TotalDebtItems == 0 ? 100 : (int)Math.Round(100.0 * d.SupplementedDebtItems / d.TotalDebtItems);
+
+                    <tr class="@(isMyTurn ? "vcb-row-action" : "")" style="cursor: pointer;" @onclick="() => OnSelectDocument.InvokeAsync(d.Id)">
+                        <td>
+                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                <span class="fw-semibold text-muted" style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;">
+                                    @d.DocumentNumber
+                                </span>
+                                @if (d.WorkflowType == "pkh_pdv")
+                                {
+                                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" style="font-size: 10.5px;">
+                                        Chuyển thẳng PDV
+                                    </span>
+                                }
+                                @if (d.Priority is "high" or "urgent")
+                                {
+                                    <span class="badge bg-danger" style="font-size: 10.5px;">Khẩn</span>
+                                }
+                            </div>
+                            <div class="fw-bold mt-1" style="font-size: 14px;">
+                                @d.CustomerName
+                                @if (!string.IsNullOrWhiteSpace(d.CustomerCif))
+                                {
+                                    <span class="fw-normal text-muted" style="font-size: 12.5px;"> · CIF: @d.CustomerCif</span>
+                                }
+                            </div>
+                        </td>
+
+                        <td>
+                            <div class="fw-semibold" style="font-size: 13.5px;">
+                                @CurrentHandlerText(d)
+                            </div>
+                            <div class="text-muted mt-1" style="font-size: 12px;">
+                                Tạo PKH: @(d.CreatedByUserName ?? "—")
+                            </div>
+                        </td>
+
+                        <td>
+                            <div class="d-flex flex-wrap align-items-center gap-1">
+                                <span class="vcb-dept-pill">@d.CurrentDepartmentCode</span>
+                                <span class="vcb-status-pill @StatusPillClass(d.Status)">
+                                    <span class="dot"></span>
+                                    @StatusLabel(d.Status)
+                                </span>
+                            </div>
+                        </td>
+
+                        <td>
+                            @if (d.TotalDebtItems == 0)
+                            {
+                                <span class="text-muted small">Không có</span>
+                            }
+                            else
+                            {
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="vcb-progress-track">
+                                        <div class="vcb-progress-fill" style="width: @(pct)%;"></div>
+                                    </div>
+                                    <span class="small fw-semibold @(d.SupplementedDebtItems >= d.TotalDebtItems ? "text-success" : "text-muted")">
+                                        @d.SupplementedDebtItems/@d.TotalDebtItems
+                                    </span>
+                                </div>
+                            }
+                        </td>
+
+                        <td style="font-size: 12.5px;">
+                            <div class="text-muted">CN: @FormatVnTime(d.UpdatedAt)</div>
+                            <div class="mt-1 @(isOverdue ? "text-danger fw-bold" : "text-muted")">
+                                Hạn: @FormatDate(d.DueDate) @(isOverdue ? "(Quá hạn)" : "")
+                            </div>
+                        </td>
+
+                        <td class="text-end">
+                            @if (isMyTurn)
+                            {
+                                <span class="badge rounded-pill px-3 py-2 text-white" style="background: #0a7a42; font-size: 12px;">
+                                    @actionLabel →
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-success fw-semibold small">Xem ›</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>;
+}

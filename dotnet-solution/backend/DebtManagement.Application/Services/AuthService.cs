@@ -1,8 +1,8 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using BCrypt.Net;
-using DebtManagement.Application.DTOs;
+using DebtManagement.Shared.DTOs;
 using DebtManagement.Application.Interfaces;
 using DebtManagement.Domain.Entities;
 using Microsoft.Extensions.Configuration;

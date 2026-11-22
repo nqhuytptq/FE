@@ -1,0 +1,88 @@
+@inject BlazorSession Session
+
+<div class="vcb-login-wrapper">
+    <div class="vcb-login-card">
+        <div class="vcb-login-left">
+            <div>
+                <div class="vcb-login-pill mb-5">VCB</div>
+                <h2 class="fw-bold mb-3" style="font-size: 28px; line-height: 1.28; letter-spacing: -0.4px;">
+                    Theo dõi chứng từ nợ,<br />minh bạch từng bước.
+                </h2>
+                <p class="mb-0" style="font-size: 14px; color: rgba(255,255,255,0.82); line-height: 1.6;">
+                    Từ phòng Khách hàng đến phòng Quản lý nợ — mọi hồ sơ, chứng từ và lượt duyệt đều ở một nơi.
+                </p>
+            </div>
+
+            <div class="d-flex gap-3 mt-4">
+                <div class="vcb-stat-mini">
+                    <div class="fw-bold fs-5">7</div>
+                    <div style="font-size: 12px; color: rgba(255,255,255,0.75);">Bước duyệt</div>
+                </div>
+                <div class="vcb-stat-mini">
+                    <div class="fw-bold fs-5">3</div>
+                    <div style="font-size: 12px; color: rgba(255,255,255,0.75);">Phòng ban</div>
+                </div>
+                <div class="vcb-stat-mini">
+                    <div class="fw-bold fs-5">24/7</div>
+                    <div style="font-size: 12px; color: rgba(255,255,255,0.75);">Theo dõi</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="vcb-login-right">
+            <h4 class="fw-bold mb-1" style="font-size: 22px;">Đăng nhập VCB</h4>
+            <p class="text-muted small mb-4">Dùng tài khoản email Vietcombank của bạn.</p>
+
+            <div class="mb-3">
+                <label class="form-label small fw-semibold mb-1">Email</label>
+                <div class="vcb-input-wrap">
+                    <span class="vcb-input-icon">✉</span>
+                    <input class="vcb-input" @bind="email" placeholder="ten@vietcombank.com.vn" />
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label small fw-semibold mb-1">Mật khẩu</label>
+                <div class="vcb-input-wrap">
+                    <span class="vcb-input-icon">🔒</span>
+                    <input type="@(showPassword ? "text" : "password")"
+                           class="vcb-input"
+                           style="padding-right: 56px;"
+                           @bind="password"
+                           placeholder="••••••••" />
+                    <button type="button"
+                            class="btn btn-link btn-sm text-decoration-none text-muted position-absolute end-0 me-2"
+                            style="font-size: 12px;"
+                            @onclick="() => showPassword = !showPassword">
+                        @(showPassword ? "Ẩn" : "Hiện")
+                    </button>
+                </div>
+            </div>
+
+            @if (loginError != null)
+            {
+                <div class="alert alert-danger py-2 small mb-3">@loginError</div>
+            }
+
+            <button class="vcb-btn-primary w-100" @onclick="LoginAsync">
+                Đăng nhập →
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnLoginSuccess { get; set; }
+
+    string email = "";
+    string password = "";
+    bool showPassword;
+    string? loginError;
+
+    async Task LoginAsync()
+    {
+        loginError = await Session.LoginAsync(email, password);
+        if (loginError == null)
+            await OnLoginSuccess.InvokeAsync();
+    }
+}

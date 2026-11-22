@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using DebtManagement.Application.DTOs;
+using DebtManagement.Shared.DTOs;
 using DebtManagement.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

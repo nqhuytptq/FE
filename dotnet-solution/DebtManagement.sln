@@ -17,6 +17,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "frontend", "frontend", "{02
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DebtManagement.BlazorApp", "frontend\DebtManagement.BlazorApp\DebtManagement.BlazorApp.csproj", "{76E7F9F0-E61B-400F-81C9-228E5017FBFC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DebtManagement.Shared", "backend\DebtManagement.Shared\DebtManagement.Shared.csproj", "{0C2FC9AD-A09A-4D93-86C9-28A2BB43AA2B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -46,6 +48,10 @@ Global
 		{76E7F9F0-E61B-400F-81C9-228E5017FBFC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{76E7F9F0-E61B-400F-81C9-228E5017FBFC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{76E7F9F0-E61B-400F-81C9-228E5017FBFC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0C2FC9AD-A09A-4D93-86C9-28A2BB43AA2B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0C2FC9AD-A09A-4D93-86C9-28A2BB43AA2B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0C2FC9AD-A09A-4D93-86C9-28A2BB43AA2B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0C2FC9AD-A09A-4D93-86C9-28A2BB43AA2B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{D5E049B0-170C-46A0-82FE-D1C2527E086E} = {7F5F1958-D764-4B7D-B3D9-EBE28397773B}
@@ -53,5 +59,6 @@ Global
 		{3FA28389-F5AB-4CEF-856A-421A555AA3EC} = {7F5F1958-D764-4B7D-B3D9-EBE28397773B}
 		{836699F5-D1D1-423A-9ECF-F417686CE8C0} = {7F5F1958-D764-4B7D-B3D9-EBE28397773B}
 		{76E7F9F0-E61B-400F-81C9-228E5017FBFC} = {0291D603-1EF4-4826-A868-421B15E35A39}
+		{0C2FC9AD-A09A-4D93-86C9-28A2BB43AA2B} = {7F5F1958-D764-4B7D-B3D9-EBE28397773B}
 	EndGlobalSection
 EndGlobal

@@ -1,5 +1,5 @@
-﻿using System.Text.Json;
-using DebtManagement.Application.DTOs;
+using System.Text.Json;
+using DebtManagement.Shared.DTOs;
 using DebtManagement.Application.Interfaces;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 

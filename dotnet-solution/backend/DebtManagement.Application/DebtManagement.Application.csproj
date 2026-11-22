@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\DebtManagement.Domain\DebtManagement.Domain.csproj" />
+    <ProjectReference Include="..\DebtManagement.Shared\DebtManagement.Shared.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />

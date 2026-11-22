@@ -4,6 +4,7 @@
     <ProjectReference Include="..\..\backend\DebtManagement.Domain\DebtManagement.Domain.csproj" />
     <ProjectReference Include="..\..\backend\DebtManagement.Application\DebtManagement.Application.csproj" />
     <ProjectReference Include="..\..\backend\DebtManagement.Infrastructure\DebtManagement.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\backend\DebtManagement.Shared\DebtManagement.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

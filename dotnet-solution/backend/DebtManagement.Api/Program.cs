@@ -47,7 +47,10 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IDebtDocumentService, DebtDocumentService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
-
+builder.Services.AddScoped<IDocumentAuditService, DocumentAuditService>();
+builder.Services.AddScoped<IDebtItemVerificationService, DebtItemVerificationService>();
+builder.Services.AddScoped<IDebtWorkflowService, DebtWorkflowService>();
+builder.Services.AddScoped<IDebtDocumentService, DebtDocumentService>();
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.PropertyNamingPolicy = null);
 builder.Services.AddEndpointsApiExplorer();

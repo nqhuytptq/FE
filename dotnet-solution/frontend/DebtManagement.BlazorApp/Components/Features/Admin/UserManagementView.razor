@@ -1,0 +1,605 @@
+@using DebtManagement.Shared.DTOs
+@using DebtManagement.Application.Interfaces
+@using DebtManagement.BlazorApp.Models
+@using static DebtManagement.BlazorApp.Models.DebtUiHelpers
+@inject BlazorSession Session
+@inject IUserService UserService
+@inject IJSRuntime JS
+
+@if (!string.IsNullOrEmpty(userSuccess))
+{
+    <div class="alert alert-success py-2 small mb-3 rounded-3">@userSuccess</div>
+}
+@if (!string.IsNullOrEmpty(userError))
+{
+    <div class="alert alert-danger py-2 small mb-3 rounded-3">@userError</div>
+}
+
+<div class="vcb-surface mb-4" style="border-radius: 16px;" @onclick="() => openMenuUserId = null">
+    <div class="p-4 pb-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div class="d-flex align-items-baseline gap-2">
+            <h5 class="fw-bold mb-0" style="font-size: 18px; color: #111827;">Danh sách người dùng</h5>
+            <span class="text-muted fw-medium" style="font-size: 15px;">@allUsers.Count</span>
+        </div>
+
+        <div class="d-flex align-items-center gap-2">
+            <button type="button"
+                    class="btn btn-sm bg-white border rounded-3 px-3 d-inline-flex align-items-center gap-2 fw-medium"
+                    style="height: 38px; font-size: 13.5px; color: #1f2937;"
+                    @onclick="ExportUsersCsv">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>Xuất danh sách</span>
+            </button>
+
+            <button type="button"
+                    class="vcb-btn-primary px-3 d-inline-flex align-items-center gap-1"
+                    style="height: 38px; font-size: 13.5px; border-radius: 10px;"
+                    @onclick="OpenCreateUserForm">
+                <span>+ Thêm người dùng</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="px-4 pb-3">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <div class="vcb-input-wrap flex-grow-1" style="min-width: 260px;">
+                <span class="vcb-input-icon" style="font-size: 14px; color: #9ca3af;">🔍</span>
+                <input class="vcb-input"
+                       style="height: 40px; font-size: 13.5px; border-radius: 12px;"
+                       @bind="userSearch" @bind:event="oninput"
+                       placeholder="Tìm họ tên hoặc email..." />
+            </div>
+
+            <select class="form-select" style="width: 170px; height: 40px; border-radius: 12px; font-size: 13.5px;" @bind="userDeptFilter">
+                <option value="">Tất cả phòng ban</option>
+                @foreach (var dept in AvailableDepartments)
+                {
+                    <option value="@dept.Id">@dept.Code</option>
+                }
+            </select>
+
+            <select class="form-select" style="width: 155px; height: 40px; border-radius: 12px; font-size: 13.5px;" @bind="userRoleFilter">
+                <option value="">Tất cả vai trò</option>
+                <option value="admin">Quản trị viên</option>
+                <option value="manager">LĐP (SUP)</option>
+                <option value="staff">Nhân viên</option>
+            </select>
+
+            <select class="form-select" style="width: 165px; height: 40px; border-radius: 12px; font-size: 13.5px;" @bind="userStatusFilter">
+                <option value="">Tất cả trạng thái</option>
+                <option value="active">Hoạt động</option>
+                <option value="locked">Đã khóa</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="table-responsive" style="overflow-x: visible;">
+        <table class="table vcb-table mb-0 align-middle">
+            <thead>
+                <tr style="background: #f9fafb; border-top: 1px solid #f1f3f5;">
+                    <th class="ps-4 text-muted fw-semibold" style="font-size: 12.5px; text-transform: none;">Người dùng</th>
+                    <th class="text-muted fw-semibold" style="font-size: 12.5px; text-transform: none;">Phòng ban</th>
+                    <th class="text-muted fw-semibold" style="font-size: 12.5px; text-transform: none;">Vai trò</th>
+                    <th class="text-muted fw-semibold" style="font-size: 12.5px; text-transform: none;">Trạng thái</th>
+                    <th class="pe-4 text-end text-muted fw-semibold" style="font-size: 12.5px; text-transform: none;">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (PagedUsers.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4 small">
+                            Không tìm thấy người dùng nào phù hợp bộ lọc.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @for (int i = 0; i < PagedUsers.Count; i++)
+                    {
+                        var u = PagedUsers[i];
+                        var isSelf = u.Id == Session.CurrentUser?.Id;
+                        var avatarStyle = GetUserAvatarStyle((SafeUserPage - 1) * userPageSize + i);
+
+                        <tr>
+                            <td class="ps-4 py-3">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="vcb-um-avatar" style="@avatarStyle">
+                                        @GetInitials(u.Name)
+                                    </div>
+                                    <div class="lh-sm">
+                                        <div class="fw-semibold" style="font-size: 14px; color: #111827;">
+                                            @u.Name
+                                            @if (isSelf)
+                                            {
+                                                <span class="badge bg-success-subtle text-success ms-1" style="font-size: 10.5px;">Bạn</span>
+                                            }
+                                        </div>
+                                        <div class="text-muted mt-1" style="font-size: 12.5px;">@u.Email</div>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <td>
+                                <span class="vcb-um-dept-badge">@u.DepartmentCode</span>
+                            </td>
+
+                            <td>
+                                @if (u.Role == "admin")
+                                {
+                                    <span class="d-inline-flex align-items-center gap-1 fw-medium" style="color: #0b6e41; font-size: 13.5px;">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                            <polyline points="9 12 11 14 15 10" />
+                                        </svg>
+                                        <span>Quản trị viên</span>
+                                    </span>
+                                }
+                                else if (u.Role == "manager")
+                                {
+                                    <span style="color: #374151; font-size: 13.5px;">LĐP (SUP)</span>
+                                }
+                                else
+                                {
+                                    <span style="color: #374151; font-size: 13.5px;">Nhân viên</span>
+                                }
+                            </td>
+
+                            <td>
+                                @if (u.IsActive)
+                                {
+                                    <span class="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill fw-medium"
+                                          style="background: #e6f7ed; color: #0e8a4a; font-size: 12.5px;">
+                                        <span>✓</span>
+                                        <span>Hoạt động</span>
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill fw-medium"
+                                          style="background: #f3f4f6; color: #6b7280; font-size: 12.5px;">
+                                        <span>✕</span>
+                                        <span>Đã khóa</span>
+                                    </span>
+                                }
+                            </td>
+
+                            <td class="pe-4 text-end">
+                                <div class="position-relative d-inline-flex align-items-center gap-1" @onclick:stopPropagation="true">
+                                    <button type="button"
+                                            class="vcb-um-icon-btn"
+                                            title="Chỉnh sửa người dùng"
+                                            @onclick="() => OpenEditUserForm(u)">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                                        </svg>
+                                    </button>
+
+                                    <button type="button"
+                                            class="vcb-um-icon-btn"
+                                            title="Thao tác khác"
+                                            @onclick="() => ToggleUserMenu(u.Id)">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <circle cx="5" cy="12" r="1.7" />
+                                            <circle cx="12" cy="12" r="1.7" />
+                                            <circle cx="19" cy="12" r="1.7" />
+                                        </svg>
+                                    </button>
+
+                                    @if (openMenuUserId == u.Id)
+                                    {
+                                        <div class="vcb-um-menu">
+                                            <button type="button" class="vcb-um-menu-item"
+                                                    @onclick="() => { openMenuUserId = null; OpenEditUserForm(u); }">
+                                                <span>✏️</span>
+                                                <span>Sửa / Đổi mật khẩu</span>
+                                            </button>
+                                            @if (!isSelf)
+                                            {
+                                                <button type="button"
+                                                        class="vcb-um-menu-item @(u.IsActive ? "text-danger" : "text-success")"
+                                                        disabled="@isSubmitting"
+                                                        @onclick="() => { openMenuUserId = null; _ = ToggleUserActiveAsync(u); }">
+                                                    <span>@(u.IsActive ? "🔒" : "🔓")</span>
+                                                    <span>@(u.IsActive ? "Khóa tài khoản" : "Mở khóa tài khoản")</span>
+                                                </button>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @{
+        var uStart = FilteredUsers.Count == 0 ? 0 : (SafeUserPage - 1) * userPageSize + 1;
+        var uEnd = Math.Min(SafeUserPage * userPageSize, FilteredUsers.Count);
+    }
+    <div class="px-4 py-3 border-top d-flex flex-wrap justify-content-between align-items-center gap-2"
+         style="font-size: 13px; background: #fcfcfd; border-radius: 0 0 16px 16px;">
+        <div class="d-flex align-items-center gap-2 text-muted">
+            <span>Hiển thị <b>@uStart–@uEnd</b> / <b>@FilteredUsers.Count</b> người dùng</span>
+            <span>·</span>
+            <select class="form-select form-select-sm"
+                    style="width: 112px; border-radius: 8px;"
+                    value="@userPageSize"
+                    @onchange="OnUserPageSizeChanged">
+                @foreach (var opt in PageSizeOptions)
+                {
+                    <option value="@opt">@opt / trang</option>
+                }
+            </select>
+        </div>
+
+        @if (UserTotalPages > 1)
+        {
+            <div class="d-flex align-items-center gap-1">
+                <button type="button"
+                        class="btn btn-sm bg-white border rounded-3 px-2"
+                        disabled="@(SafeUserPage <= 1)"
+                        @onclick="() => userPage = SafeUserPage - 1">
+                    ‹ Trước
+                </button>
+
+                @foreach (var p in GetVisiblePages(SafeUserPage, UserTotalPages))
+                {
+                    if (p == null)
+                    {
+                        <span class="px-1 text-muted">…</span>
+                    }
+                    else
+                    {
+                        var pageNum = p.Value;
+                        <button type="button"
+                                class="btn btn-sm rounded-3 px-2 fw-semibold @(pageNum == SafeUserPage ? "text-white" : "bg-white border text-dark")"
+                                style="@(pageNum == SafeUserPage ? "background: #046c3d; min-width: 32px;" : "min-width: 32px;")"
+                                @onclick="() => userPage = pageNum">
+                            @pageNum
+                        </button>
+                    }
+                }
+
+                <button type="button"
+                        class="btn btn-sm bg-white border rounded-3 px-2"
+                        disabled="@(SafeUserPage >= UserTotalPages)"
+                        @onclick="() => userPage = SafeUserPage + 1">
+                    Sau ›
+                </button>
+            </div>
+        }
+    </div>
+</div>
+
+@if (showUserForm)
+{
+    <div class="vcb-um-modal-backdrop" @onclick="CloseUserForm">
+        <div class="vcb-um-modal" @onclick:stopPropagation="true">
+            <button type="button" class="vcb-um-modal-close" @onclick="CloseUserForm">✕</button>
+
+            <h5 class="fw-bold mb-1" style="font-size: 20px; color: #111827;">
+                @(editingUserId == null ? "Thêm người dùng mới" : "Chỉnh sửa người dùng")
+            </h5>
+            <p class="text-muted mb-4" style="font-size: 13.5px;">
+                @(editingUserId == null
+                    ? "Khởi tạo tài khoản cán bộ sử dụng hệ thống VCB Debt Management."
+                    : "Cập nhật thông tin phân quyền và trạng thái hoạt động tài khoản.")
+            </p>
+
+            @if (!string.IsNullOrEmpty(userError))
+            {
+                <div class="alert alert-danger py-2 small mb-3 rounded-3">@userError</div>
+            }
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold mb-1" style="font-size: 13.5px; color: #1f2937;">Họ và tên</label>
+                <input class="vcb-um-input" @bind="userFormName" placeholder="Nhập họ và tên..." />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold mb-1" style="font-size: 13.5px; color: #1f2937;">Email</label>
+                <input class="vcb-um-input"
+                       @bind="userFormEmail"
+                       disabled="@(editingUserId != null)"
+                       placeholder="ten@vietcombank.com.vn" />
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-6">
+                    <label class="form-label fw-semibold mb-1" style="font-size: 13.5px; color: #1f2937;">Phòng ban</label>
+                    <select class="form-select vcb-um-input" @bind="userFormDeptId">
+                        @foreach (var dept in AvailableDepartments)
+                        {
+                            <option value="@dept.Id">@dept.Code</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="col-6">
+                    <label class="form-label fw-semibold mb-1" style="font-size: 13.5px; color: #1f2937;">Vai trò</label>
+                    <select class="form-select vcb-um-input" @bind="userFormRole">
+                        <option value="admin">Quản trị viên</option>
+                        <option value="manager">LĐP (SUP)</option>
+                        <option value="staff">Nhân viên</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold mb-1" style="font-size: 13.5px; color: #1f2937;">
+                    @(editingUserId == null ? "Mật khẩu khởi tạo" : "Đổi mật khẩu mới (tùy chọn)")
+                </label>
+                <input type="password"
+                       class="vcb-um-input"
+                       @bind="userFormPassword"
+                       placeholder="@(editingUserId == null ? "Nhập mật khẩu..." : "Để trống nếu giữ nguyên mật khẩu cũ")" />
+            </div>
+
+            @if (editingUserId != null)
+            {
+                <div class="form-check mt-3 mb-4">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           id="uActiveModalChk"
+                           style="width: 17px; height: 17px; accent-color: #0b6e41; cursor: pointer;"
+                           @bind="userFormIsActive"
+                           disabled="@(editingUserId == Session.CurrentUser?.Id)" />
+                    <label class="form-check-label ms-1" for="uActiveModalChk" style="font-size: 14px; color: #1f2937; cursor: pointer;">
+                        Tài khoản hoạt động
+                    </label>
+                </div>
+            }
+
+            <div class="pt-3 border-top d-flex justify-content-end gap-2">
+                <button type="button"
+                        class="btn bg-white border px-4 fw-medium"
+                        style="height: 40px; border-radius: 12px; font-size: 14px;"
+                        @onclick="CloseUserForm">
+                    Hủy
+                </button>
+                <button type="button"
+                        class="btn text-white px-4 fw-semibold d-inline-flex align-items-center gap-2"
+                        style="height: 40px; border-radius: 12px; background: #046c3d; font-size: 14px;"
+                        disabled="@isSubmitting"
+                        @onclick="SaveUserAsync">
+                    <span>✓</span>
+                    <span>Lưu thông tin</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    List<AppUserDto> allUsers = new();
+    bool isSubmitting;
+    string userSearch = "";
+    string userDeptFilter = "";
+    string userRoleFilter = "";
+    string userStatusFilter = "";
+    bool showUserForm;
+    Guid? editingUserId;
+    Guid? openMenuUserId;
+    string userFormName = "";
+    string userFormEmail = "";
+    string userFormPassword = "";
+    Guid userFormDeptId;
+    string userFormRole = "staff";
+    bool userFormIsActive = true;
+    string? userError;
+    string? userSuccess;
+
+    int userPage = 1;
+    int userPageSize = 10;
+
+    int UserTotalPages => Math.Max(1, (int)Math.Ceiling((double)FilteredUsers.Count / userPageSize));
+    int SafeUserPage => Math.Min(Math.Max(1, userPage), UserTotalPages);
+
+    List<AppUserDto> PagedUsers => FilteredUsers
+        .Skip((SafeUserPage - 1) * userPageSize)
+        .Take(userPageSize)
+        .ToList();
+
+    List<DeptOption> AvailableDepartments => allUsers
+        .Where(u => u.DepartmentId.HasValue)
+        .GroupBy(u => u.DepartmentId!.Value)
+        .Select(g => new DeptOption(g.Key, g.First().DepartmentName ?? "", g.First().DepartmentCode ?? ""))
+        .OrderBy(d => d.Code)
+        .ToList();
+
+    List<AppUserDto> FilteredUsers => allUsers
+        .Where(u =>
+        {
+            if (Guid.TryParse(userDeptFilter, out var deptId) && u.DepartmentId != deptId) return false;
+            if (!string.IsNullOrEmpty(userRoleFilter) && u.Role != userRoleFilter) return false;
+            if (userStatusFilter == "active" && !u.IsActive) return false;
+            if (userStatusFilter == "locked" && u.IsActive) return false;
+            if (!string.IsNullOrWhiteSpace(userSearch))
+            {
+                var q = userSearch.Trim().ToLower();
+                if (!u.Name.ToLower().Contains(q) && !u.Email.ToLower().Contains(q)) return false;
+            }
+            return true;
+        })
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        allUsers = (await UserService.GetAllAsync()).ToList();
+    }
+
+    void OnUserPageSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var size) && size > 0)
+        {
+            userPageSize = size;
+            userPage = 1;
+        }
+    }
+
+    string GetUserAvatarStyle(int index) => (index % 4) switch
+    {
+        0 => "background: #fef3c7; color: #92400e;",
+        1 => "background: #e0f2fe; color: #0369a1;",
+        2 => "background: #dbeafe; color: #1d4ed8;",
+        _ => "background: #dcfce7; color: #15803d;"
+    };
+
+    void ToggleUserMenu(Guid userId)
+        => openMenuUserId = openMenuUserId == userId ? null : userId;
+
+    void OpenCreateUserForm()
+    {
+        editingUserId = null;
+        openMenuUserId = null;
+        userFormName = "";
+        userFormEmail = "";
+        userFormPassword = "";
+        userFormDeptId = AvailableDepartments.FirstOrDefault()?.Id ?? Guid.Empty;
+        userFormRole = "staff";
+        userFormIsActive = true;
+        userError = null;
+        userSuccess = null;
+        showUserForm = true;
+    }
+
+    void OpenEditUserForm(AppUserDto u)
+    {
+        editingUserId = u.Id;
+        openMenuUserId = null;
+        userFormName = u.Name;
+        userFormEmail = u.Email;
+        userFormPassword = "";
+        userFormDeptId = u.DepartmentId ?? AvailableDepartments.FirstOrDefault()?.Id ?? Guid.Empty;
+        userFormRole = u.Role;
+        userFormIsActive = u.IsActive;
+        userError = null;
+        userSuccess = null;
+        showUserForm = true;
+    }
+
+    void CloseUserForm()
+    {
+        showUserForm = false;
+        editingUserId = null;
+        userError = null;
+    }
+
+    async Task SaveUserAsync()
+    {
+        if (isSubmitting) return;
+        userError = null;
+        userSuccess = null;
+
+        if (string.IsNullOrWhiteSpace(userFormName))
+        {
+            userError = "Vui lòng nhập họ và tên cán bộ.";
+            return;
+        }
+        if (userFormDeptId == Guid.Empty)
+        {
+            userError = "Vui lòng chọn phòng ban.";
+            return;
+        }
+
+        isSubmitting = true;
+        try
+        {
+            if (editingUserId == null)
+            {
+                if (string.IsNullOrWhiteSpace(userFormEmail) || string.IsNullOrWhiteSpace(userFormPassword))
+                {
+                    userError = "Vui lòng nhập đầy đủ email và mật khẩu.";
+                    return;
+                }
+
+                await UserService.CreateAsync(new CreateUserRequest(
+                    userFormName.Trim(),
+                    userFormEmail.Trim(),
+                    userFormPassword,
+                    userFormDeptId,
+                    userFormRole));
+
+                userSuccess = $"Đã tạo tài khoản '{userFormEmail.Trim()}' thành công.";
+            }
+            else
+            {
+                if (editingUserId == Session.CurrentUser?.Id && userFormRole != "admin")
+                {
+                    userError = "Không thể tự hạ quyền quản trị của chính bạn.";
+                    return;
+                }
+
+                await UserService.UpdateAsync(editingUserId.Value, new UpdateUserRequest(
+                    userFormName.Trim(),
+                    userFormDeptId,
+                    userFormRole,
+                    userFormIsActive,
+                    string.IsNullOrWhiteSpace(userFormPassword) ? null : userFormPassword));
+
+                userSuccess = $"Đã cập nhật thông tin cho '{userFormName.Trim()}'.";
+            }
+
+            showUserForm = false;
+            editingUserId = null;
+            allUsers = (await UserService.GetAllAsync()).ToList();
+        }
+        catch (Exception e) { userError = e.Message; }
+        finally { isSubmitting = false; }
+    }
+
+    async Task ToggleUserActiveAsync(AppUserDto u)
+    {
+        if (isSubmitting || u.Id == Session.CurrentUser?.Id) return;
+        isSubmitting = true;
+        userError = null;
+        userSuccess = null;
+        try
+        {
+            await UserService.UpdateAsync(u.Id, new UpdateUserRequest(
+                u.Name,
+                u.DepartmentId ?? Guid.Empty,
+                u.Role,
+                !u.IsActive,
+                null));
+
+            allUsers = (await UserService.GetAllAsync()).ToList();
+            userSuccess = u.IsActive ? $"Đã khóa tài khoản {u.Name}." : $"Đã mở khóa tài khoản {u.Name}.";
+        }
+        catch (Exception e) { userError = e.Message; }
+        finally { isSubmitting = false; }
+    }
+
+    async Task ExportUsersCsv()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Họ và tên,Email,Phòng ban,Vai trò,Trạng thái");
+        foreach (var u in FilteredUsers)
+        {
+            var roleText = u.Role switch
+            {
+                "admin" => "Quản trị viên",
+                "manager" => "LĐP (SUP)",
+                _ => "Nhân viên"
+            };
+            var statusText = u.IsActive ? "Hoạt động" : "Đã khóa";
+            sb.AppendLine($"\"{u.Name}\",\"{u.Email}\",\"{u.DepartmentCode}\",\"{roleText}\",\"{statusText}\"");
+        }
+
+        var bytes = System.Text.Encoding.UTF8.GetPreamble()
+            .Concat(System.Text.Encoding.UTF8.GetBytes(sb.ToString()))
+            .ToArray();
+        var base64 = Convert.ToBase64String(bytes);
+        var fileName = $"Danh_sach_nguoi_dung_{DateTime.UtcNow.AddHours(7):yyyyMMdd_HHmm}.csv";
+
+        await JS.InvokeVoidAsync("eval",
+            $"var a=document.createElement('a');a.href='data:text/csv;charset=utf-8;base64,{base64}';a.download='{fileName}';document.body.appendChild(a);a.click();document.body.removeChild(a);");
+    }
+}

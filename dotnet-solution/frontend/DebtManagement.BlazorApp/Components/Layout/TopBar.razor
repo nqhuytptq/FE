@@ -1,0 +1,72 @@
+@using static DebtManagement.BlazorApp.Models.DebtUiHelpers
+@inject BlazorSession Session
+
+<div class="vcb-topbar">
+    <div class="d-flex flex-column">
+        <div class="d-flex align-items-center gap-2 text-muted" style="font-size: 12px;">
+            <span>VCB Debt Management</span>
+            <span>/</span>
+            <span class="text-success fw-semibold">@(ShowUsers ? "Quản trị người dùng" : "Hồ sơ văn bản nợ")</span>
+        </div>
+        <div class="fw-semibold text-dark mt-1" style="font-size: 13px;">
+            📅 @DateTime.UtcNow.AddHours(7).ToString("dddd, dd/MM/yyyy", new System.Globalization.CultureInfo("vi-VN"))
+        </div>
+    </div>
+
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        @if (!ShowUsers && Session.CurrentUser?.DepartmentCode == "PKH" && Session.CurrentUser?.Role == "staff")
+        {
+            <button class="vcb-btn-primary px-3" style="height: 36px; font-size: 13px;"
+                    @onclick="() => OnToggleCreateModal.InvokeAsync()">
+                + Tạo hồ sơ mới
+            </button>
+        }
+
+        @if (Session.CurrentUser?.Role == "admin")
+        {
+            <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" style="height: 36px;"
+                    @onclick="() => OnToggleUsers.InvokeAsync()">
+                @(ShowUsers ? "← Danh sách hồ sơ" : "👥 Quản lý người dùng")
+            </button>
+        }
+
+        @if (!ShowUsers && MyActionCount > 0)
+        {
+            <button type="button"
+                    class="btn btn-sm rounded-pill px-3 fw-semibold"
+                    style="height: 36px; background: #fff4e5; color: #b86600; border: 1px solid #ffd8a8; font-size: 12.5px;"
+                    @onclick="() => OnSelectMyActions.InvokeAsync()">
+                🔔 @MyActionCount việc cần xử lý
+            </button>
+        }
+
+        <div class="vcb-user-chip">
+            <div class="vcb-avatar">@GetInitials(Session.CurrentUser?.Name)</div>
+            <div class="lh-sm pe-1">
+                <div class="fw-bold text-dark" style="font-size: 13px;">@Session.CurrentUser?.Name</div>
+                <div class="text-muted" style="font-size: 11px;">
+                    <span class="fw-semibold text-success">@Session.CurrentUser?.DepartmentCode</span>
+                    · @RoleLabel(Session.CurrentUser?.Role)
+                </div>
+            </div>
+        </div>
+
+        <button type="button" class="vcb-logout-pill" title="Đăng xuất khỏi hệ thống" @onclick="() => OnLogout.InvokeAsync()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span>Đăng xuất</span>
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool ShowUsers { get; set; }
+    [Parameter] public int MyActionCount { get; set; }
+    [Parameter] public EventCallback OnToggleCreateModal { get; set; }
+    [Parameter] public EventCallback OnToggleUsers { get; set; }
+    [Parameter] public EventCallback OnSelectMyActions { get; set; }
+    [Parameter] public EventCallback OnLogout { get; set; }
+}

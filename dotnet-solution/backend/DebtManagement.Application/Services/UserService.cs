@@ -1,5 +1,5 @@
-﻿using BCrypt.Net;
-using DebtManagement.Application.DTOs;
+using BCrypt.Net;
+using DebtManagement.Shared.DTOs;
 using DebtManagement.Application.Interfaces;
 using DebtManagement.Domain.Entities;
 

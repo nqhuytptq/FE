@@ -1,0 +1,881 @@
+@using DebtManagement.Shared.DTOs
+@using DebtManagement.Application.Interfaces
+@using static DebtManagement.BlazorApp.Models.DebtUiHelpers
+@inject BlazorSession Session
+@inject IDebtDocumentService DocService
+
+@if (selected != null)
+{
+    var pkhItems = selected.DebtItems.Where(x => (x.SourceDepartmentCode ?? "PKH") == "PKH").ToList();
+    var pqlnItems = selected.DebtItems.Where(x => x.SourceDepartmentCode == "PQLN").ToList();
+    var completedItemsCount = selected.DebtItems.Count(x => IsItemFullyCompleted(x, IsDirectPdv));
+    var totalPct = selected.DebtItems.Count == 0 ? 100 : (int)Math.Round(100.0 * completedItemsCount / selected.DebtItems.Count);
+    var activeStepLabels = GetStepLabels(IsDirectPdv);
+    var stepIdx = CurrentStepIndex(selected.Status, IsDirectPdv);
+
+    <div class="vcb-backdrop" @onclick="CloseAsync">
+        <div class="vcb-drawer" @onclick:stopPropagation="true">
+            <div class="vcb-drawer-header">
+                <button class="vcb-drawer-close" @onclick="CloseAsync">✕</button>
+                <div class="d-flex align-items-center gap-2" style="font-family: monospace; font-size: 12px; opacity: 0.9;">
+                    <span>@selected.DocumentNumber</span>
+                    @if (!string.IsNullOrWhiteSpace(selected.CustomerCif))
+                    {
+                        <span>· CIF: @selected.CustomerCif</span>
+                    }
+                </div>
+                <h4 class="fw-bold mb-2 mt-1">@selected.CustomerName</h4>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="badge rounded-pill px-3 py-1" style="background: rgba(255,255,255,0.22); font-weight: 600;">
+                        @(selected.CustomerType == "individual" ? "👤 Cá nhân" : "🏢 Công ty")
+                    </span>
+                    @if (IsDirectPdv)
+                    {
+                        <span class="badge rounded-pill px-3 py-1" style="background: rgba(255,255,255,0.25); font-weight: 600;">
+                            ⚡ Chuyển thẳng PDV
+                        </span>
+                    }
+                    <span class="badge rounded-pill px-3 py-1" style="background: rgba(255,255,255,0.18); font-weight: 500;">
+                        @selected.CurrentDepartmentName
+                    </span>
+                    <span class="badge rounded-pill bg-white text-success px-3 py-1 fw-semibold">
+                        @StatusLabel(selected.Status)
+                    </span>
+                </div>
+            </div>
+
+            <div class="vcb-drawer-body">
+                @if (actionError != null)
+                {
+                    <div class="alert alert-danger py-2 small mb-3">@actionError</div>
+                }
+                @if (actionMessage != null)
+                {
+                    <div class="alert alert-success py-2 small mb-3">@actionMessage</div>
+                }
+
+                <div class="vcb-stepper">
+                    @for (int idx = 0; idx < activeStepLabels.Length; idx++)
+                    {
+                        var sNumber = idx + 1;
+                        var css = sNumber < stepIdx ? "done" : (sNumber == stepIdx ? (selected.Status == "Completed" ? "done" : "current") : "");
+                        <div class="vcb-step @css">
+                            <div class="vcb-step-circle">
+                                @if (sNumber < stepIdx || (sNumber == activeStepLabels.Length && selected.Status == "Completed"))
+                                {
+                                    <span>✓</span>
+                                }
+                                else
+                                {
+                                    <span>@sNumber</span>
+                                }
+                            </div>
+                            <div class="vcb-step-label">@activeStepLabels[idx]</div>
+                        </div>
+                    }
+                </div>
+
+                <div class="vcb-surface p-3 mb-3 small">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <span class="text-muted">Mã CIF:</span> <b>@(string.IsNullOrWhiteSpace(selected.CustomerCif) ? "—" : selected.CustomerCif)</b>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted">Đối tượng:</span> <b>@(selected.CustomerType == "individual" ? "Khách hàng Cá nhân" : "Khách hàng Công ty")</b>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted">Luồng xử lý:</span>
+                            <b>@(IsDirectPdv ? "Chuyển thẳng PDV (PKH → PDV)" : "Tiêu chuẩn (PKH → PQLN → PDV)")</b>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted">Hạn thanh toán:</span> <b class="text-danger">@FormatDate(selected.DueDate)</b>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted">PKH khởi tạo:</span> <b>@(selected.CreatedByUserName ?? "—")</b>
+                        </div>
+                        @if (!IsDirectPdv)
+                        {
+                            <div class="col-md-6">
+                                <span class="text-muted">PQLN xử lý:</span> <b>@(selected.PqlnReceiverName ?? "Chưa nhận")</b>
+                            </div>
+                        }
+                        <div class="col-md-6">
+                            <span class="text-muted">PDV xử lý:</span> <b>@(selected.PdvReceiverName ?? "Chưa nhận")</b>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="vcb-surface p-3 mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-bold" style="font-size: 14.5px;">Chứng từ nợ</span>
+                        <span class="small text-muted fw-semibold">
+                            @(selected.DebtItems.Count == 0 ? "Không có" : $"{completedItemsCount}/{selected.DebtItems.Count} đã đủ")
+                        </span>
+                    </div>
+                    <div class="vcb-progress-track w-100 mb-3" style="height: 5px;">
+                        <div class="vcb-progress-fill" style="width: @(totalPct)%;"></div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="@(IsDirectPdv ? "col-12" : "col-md-6")">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-uppercase fw-bold text-muted" style="font-size: 11px; letter-spacing: 0.4px;">
+                                    CHỨNG TỪ PKH
+                                </span>
+                                <span class="small text-muted fw-semibold" style="font-size: 11px;">
+                                    @(IsDirectPdv
+                                        ? pkhItems.Count(x => x.IsSupplemented && x.IsVerifiedByPdv)
+                                        : pkhItems.Count(x => x.IsSupplemented && x.IsVerifiedByPqln))/@pkhItems.Count
+                                </span>
+                            </div>
+
+                            @if (pkhItems.Count == 0)
+                            {
+                                <div class="text-muted small py-2">Không có chứng từ nợ PKH</div>
+                            }
+                            @foreach (var it in pkhItems)
+                            {
+                                var isVerified = IsDirectPdv ? it.IsVerifiedByPdv : it.IsVerifiedByPqln;
+                                var verifiedAt = IsDirectPdv ? it.PdvVerifiedAt : it.PqlnVerifiedAt;
+                                var verifierDept = IsDirectPdv ? "PDV" : "PQLN";
+
+                                <div class="vcb-item-row">
+                                    @if (editingItemId == it.Id)
+                                    {
+                                        <input class="form-control form-control-sm" @bind="editItemName" />
+                                        <div class="d-flex gap-1">
+                                            <button class="btn btn-sm btn-success py-0" @onclick="() => SaveEditItem(it)">Lưu</button>
+                                            <button class="btn btn-sm btn-secondary py-0" @onclick="CancelEditItem">Hủy</button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div>
+                                            <div class="small fw-semibold">📄 @it.ItemName</div>
+                                            @if (it.IsSupplemented)
+                                            {
+                                                <div class="text-muted mt-1" style="font-size: 11.5px;">
+                                                    PKH bổ sung: <b>@(it.SupplementedAt.HasValue ? FormatFullVnTime(it.SupplementedAt.Value) : "—")</b>
+                                                    @if (isVerified)
+                                                    {
+                                                        <span class="text-success d-block">@verifierDept xác nhận: <b>@(verifiedAt.HasValue ? FormatFullVnTime(verifiedAt.Value) : "—")</b></span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-primary d-block"><i>Chờ @verifierDept xác nhận đã nhận</i></span>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                        <div class="d-flex flex-column align-items-end gap-1 flex-shrink-0">
+                                            @if (!it.IsSupplemented)
+                                            {
+                                                <span class="vcb-status-pill pill-amber" style="font-size: 11.5px; padding: 2px 10px;">
+                                                    <span class="dot"></span>Chưa bổ sung
+                                                </span>
+                                            }
+                                            else if (!isVerified)
+                                            {
+                                                <span class="vcb-status-pill pill-blue" style="font-size: 11.5px; padding: 2px 10px;">
+                                                    <span class="dot"></span>Chờ @verifierDept XN
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="vcb-status-pill pill-green" style="font-size: 11.5px; padding: 2px 10px;">
+                                                    <span class="dot"></span>Đã bổ sung
+                                                </span>
+                                            }
+                                            @if (CanManagePkhItem && !it.IsSupplemented)
+                                            {
+                                                <div class="d-flex gap-1">
+                                                    <button class="btn btn-link btn-sm p-0 text-primary text-decoration-none" style="font-size: 11.5px;" @onclick="() => StartEditItem(it)">Sửa</button>
+                                                    <span class="text-muted">·</span>
+                                                    <button class="btn btn-link btn-sm p-0 text-danger text-decoration-none" style="font-size: 11.5px;" @onclick="() => DeleteDebtItem(it.Id)">Xóa</button>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            @if (CanManagePkhItem)
+                            {
+                                <div class="d-flex gap-2 mt-2">
+                                    <input class="form-control form-control-sm rounded-3" @bind="addItemName" placeholder="Tên chứng từ PKH..." />
+                                    <button class="btn btn-sm btn-outline-success rounded-3 fw-semibold flex-shrink-0" @onclick="AddDebtItem">+ Thêm</button>
+                                </div>
+                            }
+                        </div>
+
+                        @if (!IsDirectPdv)
+                        {
+                            <div class="col-md-6">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="text-uppercase fw-bold text-muted" style="font-size: 11px; letter-spacing: 0.4px;">
+                                        CHỨNG TỪ PQLN
+                                    </span>
+                                    <span class="small text-muted fw-semibold" style="font-size: 11px;">
+                                        @pqlnItems.Count(x => x.IsSupplemented && x.IsVerifiedByPdv)/@pqlnItems.Count
+                                    </span>
+                                </div>
+
+                                @if (pqlnItems.Count == 0 && !CanManagePqlnItem)
+                                {
+                                    <div class="text-muted small py-2">Không có chứng từ nợ PQLN</div>
+                                }
+                                @foreach (var it in pqlnItems)
+                                {
+                                    <div class="vcb-item-row">
+                                        @if (editingItemId == it.Id)
+                                        {
+                                            <input class="form-control form-control-sm" @bind="editItemName" />
+                                            <div class="d-flex gap-1">
+                                                <button class="btn btn-sm btn-success py-0" @onclick="() => SaveEditItem(it)">Lưu</button>
+                                                <button class="btn btn-sm btn-secondary py-0" @onclick="CancelEditItem">Hủy</button>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div>
+                                                <div class="small fw-semibold">📄 @it.ItemName</div>
+                                                @if (it.IsSupplemented)
+                                                {
+                                                    <div class="text-muted mt-1" style="font-size: 11.5px;">
+                                                        PQLN bổ sung: <b>@(it.SupplementedAt.HasValue ? FormatFullVnTime(it.SupplementedAt.Value) : "—")</b>
+                                                        @if (it.IsVerifiedByPdv)
+                                                        {
+                                                            <span class="text-success d-block">PDV xác nhận: <b>@(it.PdvVerifiedAt.HasValue ? FormatFullVnTime(it.PdvVerifiedAt.Value) : "—")</b></span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-primary d-block"><i>Chờ PDV xác nhận đã nhận</i></span>
+                                                        }
+                                                    </div>
+                                                }
+                                            </div>
+                                            <div class="d-flex flex-column align-items-end gap-1 flex-shrink-0">
+                                                @if (!it.IsSupplemented)
+                                                {
+                                                    <span class="vcb-status-pill pill-amber" style="font-size: 11.5px; padding: 2px 10px;">
+                                                        <span class="dot"></span>Chưa bổ sung
+                                                    </span>
+                                                }
+                                                else if (!it.IsVerifiedByPdv)
+                                                {
+                                                    <span class="vcb-status-pill pill-blue" style="font-size: 11.5px; padding: 2px 10px;">
+                                                        <span class="dot"></span>Chờ PDV XN
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="vcb-status-pill pill-green" style="font-size: 11.5px; padding: 2px 10px;">
+                                                        <span class="dot"></span>Đã bổ sung
+                                                    </span>
+                                                }
+                                                @if (CanManagePqlnItem && !it.IsSupplemented)
+                                                {
+                                                    <div class="d-flex gap-1">
+                                                        <button class="btn btn-link btn-sm p-0 text-primary text-decoration-none" style="font-size: 11.5px;" @onclick="() => StartEditItem(it)">Sửa</button>
+                                                        <span class="text-muted">·</span>
+                                                        <button class="btn btn-link btn-sm p-0 text-danger text-decoration-none" style="font-size: 11.5px;" @onclick="() => DeleteDebtItem(it.Id)">Xóa</button>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                }
+
+                                @if (CanManagePqlnItem)
+                                {
+                                    <div class="d-flex gap-2 mt-2">
+                                        <input class="form-control form-control-sm rounded-3" @bind="addItemName" placeholder="Tên chứng từ PQLN..." />
+                                        <button class="btn btn-sm btn-outline-success rounded-3 fw-semibold flex-shrink-0" @onclick="AddDebtItem">+ Thêm</button>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    @if (SupplementableItems.Any())
+                    {
+                        <div class="mt-3 p-2 rounded-3 border border-success bg-success-subtle">
+                            <div class="small fw-semibold text-success-emphasis mb-1">Đánh dấu đã bổ sung chứng từ (@Dept):</div>
+                            <div class="d-flex flex-wrap gap-3">
+                                @foreach (var it in SupplementableItems)
+                                {
+                                    <div class="form-check small">
+                                        <input class="form-check-input" type="checkbox"
+                                               checked="@suppIds.Contains(it.Id)"
+                                               @onchange="(e) => ToggleSupp(it.Id, (bool)(e.Value ?? false))" />
+                                        <label class="form-check-label">@it.ItemName</label>
+                                    </div>
+                                }
+                            </div>
+                            <button class="btn btn-sm btn-success mt-2 fw-semibold" @onclick="SupplementItems" disabled="@(suppIds.Count == 0 || isSubmitting)">
+                                ✓ Xác nhận bổ sung (@suppIds.Count)
+                            </button>
+                        </div>
+                    }
+
+                    @if (VerifiablePkhItems.Any())
+                    {
+                        <div class="mt-3 p-2 rounded-3 border border-info bg-info-subtle">
+                            <div class="small fw-semibold text-info-emphasis mb-1">
+                                @(IsDirectPdv ? "PDV xác nhận đã nhận chứng từ từ PKH:" : "PQLN xác nhận đã nhận chứng từ từ PKH:")
+                            </div>
+                            <div class="d-flex flex-wrap gap-3">
+                                @foreach (var it in VerifiablePkhItems)
+                                {
+                                    <div class="form-check small">
+                                        <input class="form-check-input" type="checkbox"
+                                               checked="@verifyIds.Contains(it.Id)"
+                                               @onchange="(e) => ToggleVerify(it.Id, (bool)(e.Value ?? false))" />
+                                        <label class="form-check-label">@it.ItemName</label>
+                                    </div>
+                                }
+                            </div>
+                            <button class="btn btn-sm btn-primary mt-2 fw-semibold" @onclick="VerifyPkhItems" disabled="@(verifyIds.Count == 0 || isSubmitting)">
+                                ✓ Xác nhận đã nhận từ PKH (@verifyIds.Count)
+                            </button>
+                        </div>
+                    }
+
+                    @if (VerifiablePqlnItems.Any())
+                    {
+                        <div class="mt-3 p-2 rounded-3 border border-primary bg-primary-subtle">
+                            <div class="small fw-semibold text-primary-emphasis mb-1">PDV xác nhận đã nhận chứng từ từ PQLN:</div>
+                            <div class="d-flex flex-wrap gap-3">
+                                @foreach (var it in VerifiablePqlnItems)
+                                {
+                                    <div class="form-check small">
+                                        <input class="form-check-input" type="checkbox"
+                                               checked="@verifyPqlnIds.Contains(it.Id)"
+                                               @onchange="(e) => ToggleVerifyPqln(it.Id, (bool)(e.Value ?? false))" />
+                                        <label class="form-check-label">@it.ItemName</label>
+                                    </div>
+                                }
+                            </div>
+                            <button class="btn btn-sm btn-primary mt-2 fw-semibold" @onclick="VerifyPqlnItems" disabled="@(verifyPqlnIds.Count == 0 || isSubmitting)">
+                                ✓ Xác nhận đã nhận từ PQLN (@verifyPqlnIds.Count)
+                            </button>
+                        </div>
+                    }
+                </div>
+
+                @{
+                    var orderedHistory = selected.CirculationHistory
+                        .OrderByDescending(x => x.CreatedAt)
+                        .ToList();
+                }
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-bold" style="font-size: 15px;">Luồng theo dõi</span>
+                    <span class="text-muted" style="font-size: 11.5px;">Mới nhất ở trên</span>
+                </div>
+
+                <div class="vcb-surface p-3 px-4">
+                    <div class="vcb-timeline">
+                        @for (int i = 0; i < orderedHistory.Count; i++)
+                        {
+                            var h = orderedHistory[i];
+                            var isLatest = i == 0;
+                            var deptFlow = FormatHistoryDeptFlow(h);
+
+                            <div class="vcb-tl-item @(isLatest ? "latest" : "")">
+                                <span class="vcb-tl-dot"></span>
+
+                                <div class="d-flex flex-wrap align-items-baseline gap-2">
+                                    <span class="vcb-tl-title">@FormatHistoryActionLabel(h)</span>
+                                    <span class="vcb-tl-time">@FormatFullVnTime(h.CreatedAt)</span>
+                                </div>
+
+                                @if (!string.IsNullOrWhiteSpace(h.Notes))
+                                {
+                                    <div class="vcb-tl-note">@h.Notes</div>
+                                }
+
+                                <div class="vcb-tl-meta">
+                                    <span>👤 @h.PerformedByUserName</span>
+                                    @if (!string.IsNullOrEmpty(deptFlow))
+                                    {
+                                        <span>·</span>
+                                        <span>@deptFlow</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="vcb-drawer-footer">
+                @if (CanApprovePkh)
+                {
+                    <input class="form-control form-control-sm" @bind="approvalNote" placeholder="Ghi chú duyệt PKH..." />
+                    <button class="vcb-btn-primary px-3 flex-shrink-0" style="height: 38px;" disabled="@isSubmitting" @onclick="ApprovePkh">
+                        ✓ Duyệt hồ sơ PKH →
+                    </button>
+                }
+                else if (CanReceivePqln)
+                {
+                    <span class="small text-muted">Hồ sơ đang chờ phòng PQLN tiếp nhận</span>
+                    <button class="vcb-btn-primary px-3 flex-shrink-0" style="height: 38px;" disabled="@isSubmitting" @onclick="ReceivePqln">
+                        Tiếp nhận hồ sơ PQLN
+                    </button>
+                }
+                else if (CanSubmitPqln)
+                {
+                    <input class="form-control form-control-sm" @bind="approvalNote" placeholder="Ghi chú trình SUP PQLN..." />
+                    <button class="vcb-btn-primary px-3 flex-shrink-0" style="height: 38px;" disabled="@isSubmitting" @onclick="SubmitPqln">
+                        ➤ Trình SUP PQLN
+                    </button>
+                }
+                else if (CanApprovePqln)
+                {
+                    <input class="form-control form-control-sm" @bind="approvalNote" placeholder="Ghi chú duyệt PQLN..." />
+                    <button class="vcb-btn-primary px-3 flex-shrink-0" style="height: 38px;" disabled="@isSubmitting" @onclick="ApprovePqln">
+                        ✓ Duyệt hồ sơ PQLN →
+                    </button>
+                }
+                else if (CanReceivePdv)
+                {
+                    <span class="small text-muted">Hồ sơ đang chờ phòng PDV tiếp nhận</span>
+                    <button class="vcb-btn-primary px-3 flex-shrink-0" style="height: 38px;" disabled="@isSubmitting" @onclick="ReceivePdv">
+                        Tiếp nhận hồ sơ PDV
+                    </button>
+                }
+                else if (CanPostEntry)
+                {
+                    <input class="form-control form-control-sm" @bind="approvalNote" placeholder="Ghi chú đi bút toán..." />
+                    <button class="vcb-btn-primary px-3 flex-shrink-0" style="height: 38px;" disabled="@isSubmitting" @onclick="PostEntry">
+                        Xác nhận đi bút toán →
+                    </button>
+                }
+                else if (CanApprovePdv)
+                {
+                    var unsupCount = selected.DebtItems.Count(x => !IsItemFullyCompleted(x, IsDirectPdv));
+                    var blocked = St == "PdvEntryApproved" && unsupCount > 0;
+                    var btnLabel = St == "PdvEntryPosted"
+                        ? (unsupCount > 0 ? "✓ Duyệt bút toán (Lần 1)" : "✓ Duyệt hoàn tất hồ sơ")
+                        : "✓ Duyệt hoàn tất (Lần 2)";
+
+                    <input class="form-control form-control-sm" @bind="approvalNote" placeholder="Ghi chú duyệt PDV..." />
+                    <button class="vcb-btn-primary px-3 flex-shrink-0" style="height: 38px;" disabled="@(isSubmitting || blocked)" @onclick="ApprovePdv">
+                        @btnLabel
+                    </button>
+                }
+                else
+                {
+                    <span class="small text-muted">@GetFooterStatusHint(selected)</span>
+                    <button type="button" class="btn btn-sm bg-white border rounded-3 px-3 flex-shrink-0" style="height: 36px;" @onclick="CloseAsync">
+                        Đóng
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid? DocumentId { get; set; }
+    [Parameter] public EventCallback OnDocumentChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    Guid? loadedDocumentId;
+    DebtDocumentDetailDto? selected;
+    string? actionMessage;
+    string? actionError;
+    bool isSubmitting;
+    string addItemName = "";
+    string approvalNote = "";
+    HashSet<Guid> suppIds = new();
+    HashSet<Guid> verifyIds = new();
+    HashSet<Guid> verifyPqlnIds = new();
+    Guid? editingItemId;
+    string editItemName = "";
+
+    static readonly string[] StandardStepLabels =
+    [
+        "Khởi tạo",
+        "SUP PKH duyệt",
+        "PQLN đang xử lý",
+        "SUP PQLN duyệt",
+        "PDV đang xử lý",
+        "SUP PDV duyệt",
+        "Hoàn tất"
+    ];
+
+    static readonly string[] DirectPdvStepLabels =
+    [
+        "Khởi tạo",
+        "SUP PKH duyệt",
+        "PDV đang xử lý",
+        "SUP PDV duyệt",
+        "Hoàn tất"
+    ];
+
+    static string[] GetStepLabels(bool isDirectPdv)
+        => isDirectPdv ? DirectPdvStepLabels : StandardStepLabels;
+
+    static int CurrentStepIndex(string status, bool isDirectPdv) => isDirectPdv
+        ? status switch
+        {
+            "PkhPendingSup" => 1,
+            "PdvPendingReceive" => 2,
+            "PdvReceived" or "PdvEntryPosted" => 3,
+            "PdvEntryApproved" => 4,
+            "Completed" => 5,
+            _ => 1
+        }
+        : status switch
+        {
+            "PkhPendingSup" => 1,
+            "PqlnPendingReceive" => 2,
+            "PqlnReceived" or "PqlnPendingSup" => 3,
+            "PdvPendingReceive" => 4,
+            "PdvReceived" or "PdvEntryPosted" => 5,
+            "PdvEntryApproved" => 6,
+            "Completed" => 7,
+            _ => 1
+        };
+
+    string Dept => Session.CurrentUser?.DepartmentCode ?? "";
+    string St => selected?.Status ?? "";
+    bool IsDirectPdv => selected?.WorkflowType == "pkh_pdv";
+    bool R(string r) => Session.CurrentUser?.Role == r;
+
+    bool CanApprovePkh => selected != null && Dept == "PKH" && R("manager") && St == "PkhPendingSup";
+    bool CanReceivePqln => selected != null && !IsDirectPdv && Dept == "PQLN" && R("staff") && St == "PqlnPendingReceive";
+    bool CanSubmitPqln => selected != null && !IsDirectPdv && Dept == "PQLN" && R("staff") && St == "PqlnReceived" && selected.PqlnReceiverId == Session.CurrentUser?.Id;
+    bool CanApprovePqln => selected != null && !IsDirectPdv && Dept == "PQLN" && R("manager") && St == "PqlnPendingSup";
+    bool CanReceivePdv => selected != null && Dept == "PDV" && R("staff") && St == "PdvPendingReceive";
+    bool CanPostEntry => selected != null && Dept == "PDV" && R("staff") && St == "PdvReceived" && selected.PdvReceiverId == Session.CurrentUser?.Id;
+    bool CanApprovePdv => selected != null && Dept == "PDV" && R("manager") && (St == "PdvEntryPosted" || St == "PdvEntryApproved");
+
+    bool CanSupplement => selected != null
+        && Session.CurrentUser != null
+        && R("staff")
+        && ((Dept == "PKH" && selected.CreatedByUserId == Session.CurrentUser.Id)
+            || (!IsDirectPdv && Dept == "PQLN" && selected.PqlnReceiverId == Session.CurrentUser.Id));
+
+    IEnumerable<DebtItemDto> SupplementableItems => selected == null || !CanSupplement
+        ? Enumerable.Empty<DebtItemDto>()
+        : selected.DebtItems.Where(x => !x.IsSupplemented && (x.SourceDepartmentCode ?? "PKH") == Dept);
+
+    bool CanVerifyPkhSupplement => selected != null
+        && Session.CurrentUser != null
+        && R("staff")
+        && (IsDirectPdv
+            ? (Dept == "PDV" && selected.PdvReceiverId == Session.CurrentUser.Id)
+            : (Dept == "PQLN" && selected.PqlnReceiverId == Session.CurrentUser.Id));
+
+    IEnumerable<DebtItemDto> VerifiablePkhItems => selected == null || !CanVerifyPkhSupplement
+        ? Enumerable.Empty<DebtItemDto>()
+        : selected.DebtItems.Where(x => (x.SourceDepartmentCode ?? "PKH") == "PKH"
+                                     && x.IsSupplemented
+                                     && (IsDirectPdv ? !x.IsVerifiedByPdv : !x.IsVerifiedByPqln));
+
+    bool CanVerifyPqlnSupplement => selected != null
+        && !IsDirectPdv
+        && Session.CurrentUser != null
+        && R("staff")
+        && Dept == "PDV"
+        && selected.PdvReceiverId == Session.CurrentUser.Id;
+
+    IEnumerable<DebtItemDto> VerifiablePqlnItems => selected == null || !CanVerifyPqlnSupplement
+        ? Enumerable.Empty<DebtItemDto>()
+        : selected.DebtItems.Where(x => x.SourceDepartmentCode == "PQLN"
+                                     && x.IsSupplemented
+                                     && !x.IsVerifiedByPdv);
+
+    bool CanManagePkhItem => selected != null && Dept == "PKH" && R("staff") && St == "PkhPendingSup" && selected.CreatedByUserId == Session.CurrentUser?.Id;
+    bool CanManagePqlnItem => selected != null && !IsDirectPdv && Dept == "PQLN" && R("staff") && (St == "PqlnReceived" || St == "PqlnPendingSup") && selected.PqlnReceiverId == Session.CurrentUser?.Id;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (DocumentId == null)
+        {
+            loadedDocumentId = null;
+            selected = null;
+            return;
+        }
+
+        if (DocumentId != loadedDocumentId)
+        {
+            loadedDocumentId = DocumentId;
+            await ReloadSelectedAsync(resetState: true);
+        }
+    }
+
+    async Task ReloadSelectedAsync(bool resetState)
+    {
+        if (resetState)
+        {
+            suppIds.Clear();
+            verifyIds.Clear();
+            verifyPqlnIds.Clear();
+            approvalNote = "";
+            CancelEditItem();
+            actionMessage = null;
+            actionError = null;
+        }
+
+        if (DocumentId.HasValue && Session.CurrentUser != null)
+            selected = await DocService.GetByIdAsync(DocumentId.Value, Session.CurrentUser.Id);
+    }
+
+    async Task CloseAsync()
+    {
+        CancelEditItem();
+        approvalNote = "";
+        suppIds.Clear();
+        verifyIds.Clear();
+        verifyPqlnIds.Clear();
+        loadedDocumentId = null;
+        selected = null;
+        await OnClose.InvokeAsync();
+    }
+
+    string GetFooterStatusHint(DebtDocumentDetailDto d) => d.Status switch
+    {
+        "PkhPendingSup" => "Đang chờ Lãnh đạo PKH (SUP PKH) phê duyệt",
+        "PqlnPendingReceive" => "Đã duyệt PKH — Đang chờ cán bộ PQLN tiếp nhận",
+        "PqlnReceived" => $"Đang được {d.PqlnReceiverName ?? "cán bộ PQLN"} thụ lý",
+        "PqlnPendingSup" => "Đang chờ Lãnh đạo PQLN (SUP PQLN) phê duyệt",
+        "PdvPendingReceive" => d.WorkflowType == "pkh_pdv"
+            ? "Đã duyệt PKH — Đang chờ cán bộ PDV tiếp nhận"
+            : "Đã duyệt PQLN — Đang chờ cán bộ PDV tiếp nhận",
+        "PdvReceived" => $"Đang được {d.PdvReceiverName ?? "cán bộ PDV"} thụ lý & đi bút toán",
+        "PdvEntryPosted" => "Đã đi bút toán — Đang chờ Lãnh đạo PDV duyệt",
+        "PdvEntryApproved" => "Đã duyệt bút toán — Đang chờ bổ sung & xác nhận đủ chứng từ nợ",
+        "Completed" => "Hồ sơ đã hoàn tất toàn bộ quy trình",
+        _ => "Hồ sơ đang ở bước xử lý khác"
+    };
+
+    string FormatHistoryActionLabel(CirculationHistoryDto h)
+    {
+        var note = (h.Notes ?? "").ToLower();
+        if (note.Contains("khởi tạo")) return "Khởi tạo";
+        if (h.Action == "PkhSupApproved" || note.Contains("sup pkh") || (note.Contains("sup duyệt") && (IsDirectPdv || note.Contains("khách hàng")))) return "SUP PKH duyệt";
+        if (note.Contains("sup duyệt")) return "SUP duyệt";
+        if (note.Contains("tiếp nhận") && note.Contains("pqln")) return "PQLN tiếp nhận";
+        if (note.Contains("tiếp nhận") && note.Contains("pdv")) return "PDV tiếp nhận";
+        if (note.Contains("gửi sup pqln") || note.Contains("trình sup pqln")) return "Trình SUP PQLN";
+        if (note.Contains("bút toán") && note.Contains("duyệt")) return "SUP PDV duyệt";
+        if (note.Contains("bút toán")) return "Đi bút toán";
+        if (note.Contains("hoàn tất")) return "Duyệt hoàn tất";
+        if (note.Contains("xác nhận") && note.Contains("chứng từ")) return "Xác nhận chứng từ";
+        if (note.Contains("bổ sung")) return "Bổ sung";
+        if (note.Contains("sửa tên chứng từ") || note.Contains("sửa chứng từ")) return "Sửa chứng từ";
+        if (note.Contains("xóa chứng từ")) return "Xóa chứng từ";
+        if (note.Contains("thêm chứng từ")) return "Thêm chứng từ";
+        return "Cập nhật hồ sơ";
+    }
+
+    string FormatHistoryDeptFlow(CirculationHistoryDto h)
+    {
+        if (h.FromDepartmentId.HasValue && h.ToDepartmentId.HasValue && h.FromDepartmentId != h.ToDepartmentId
+            && !string.IsNullOrWhiteSpace(h.FromDepartmentName) && !string.IsNullOrWhiteSpace(h.ToDepartmentName))
+        {
+            return $"{h.FromDepartmentName} → {h.ToDepartmentName}";
+        }
+
+        var note = (h.Notes ?? "").ToLower();
+
+        if (note.Contains("khởi tạo")) return "Phòng Khách hàng";
+
+        if (note.Contains("sup duyệt") || h.Action == "PkhSupApproved")
+        {
+            if (IsDirectPdv)
+                return "Phòng Khách hàng → Phòng Dịch vụ khách hàng";
+
+            var pkhApprovedAt = selected?.CirculationHistory
+                .Where(x => (x.Notes ?? "").ToLower().Contains("sup duyệt") || x.Action == "PkhSupApproved")
+                .OrderBy(x => x.CreatedAt)
+                .FirstOrDefault()?.CreatedAt;
+
+            return pkhApprovedAt.HasValue && h.CreatedAt > pkhApprovedAt.Value
+                ? "Phòng Quản lý nợ → Phòng Dịch vụ khách hàng"
+                : "Phòng Khách hàng → Phòng Quản lý nợ";
+        }
+
+        if (note.Contains("pqln")) return "Phòng Quản lý nợ";
+        if (note.Contains("pdv") || note.Contains("bút toán")) return "Phòng Dịch vụ khách hàng";
+
+        if (selected != null)
+        {
+            var supApprovals = selected.CirculationHistory
+                .Where(x => (x.Notes ?? "").ToLower().Contains("sup duyệt") || x.Action is "PkhSupApproved" or "PqlnSupApproved")
+                .OrderBy(x => x.CreatedAt)
+                .ToList();
+
+            if (IsDirectPdv)
+            {
+                if (supApprovals.Count >= 1 && h.CreatedAt > supApprovals[0].CreatedAt)
+                    return "Phòng Dịch vụ khách hàng";
+            }
+            else
+            {
+                if (supApprovals.Count >= 2 && h.CreatedAt > supApprovals[1].CreatedAt)
+                    return "Phòng Dịch vụ khách hàng";
+                if (supApprovals.Count >= 1 && h.CreatedAt > supApprovals[0].CreatedAt)
+                    return "Phòng Quản lý nợ";
+            }
+        }
+
+        return "Phòng Khách hàng";
+    }
+
+    async Task AddDebtItem()
+    {
+        if (selected == null || Session.CurrentUser == null || string.IsNullOrWhiteSpace(addItemName)) return;
+        actionError = null;
+        try
+        {
+            await DocService.AddDebtItemsAsync(
+                selected.Id,
+                new AddDebtItemsRequest(new List<CreateDebtItemRequest> { new CreateDebtItemRequest { ItemName = addItemName.Trim() } }, $"Thêm chứng từ nợ tại {Dept}"),
+                Session.CurrentUser.Id);
+            addItemName = "";
+            await ReloadSelectedAsync(resetState: true);
+            await OnDocumentChanged.InvokeAsync();
+            actionMessage = "Đã thêm chứng từ nợ";
+        }
+        catch (Exception e) { actionError = e.Message; }
+    }
+
+    void StartEditItem(DebtItemDto it) { editingItemId = it.Id; editItemName = it.ItemName; }
+    void CancelEditItem() { editingItemId = null; editItemName = ""; }
+
+    async Task SaveEditItem(DebtItemDto it)
+    {
+        if (selected == null || Session.CurrentUser == null) return;
+        if (string.IsNullOrWhiteSpace(editItemName)) { actionError = "Tên chứng từ không được để trống"; return; }
+        actionError = null;
+        try
+        {
+            await DocService.UpdateDebtItemAsync(selected.Id, it.Id, new UpdateDebtItemRequest(editItemName.Trim(), it.Notes), Session.CurrentUser.Id);
+            CancelEditItem();
+            await ReloadSelectedAsync(resetState: true);
+            actionMessage = "Đã cập nhật tên chứng từ nợ";
+        }
+        catch (Exception e) { actionError = e.Message; }
+    }
+
+    async Task DeleteDebtItem(Guid itemId)
+    {
+        if (selected == null || Session.CurrentUser == null) return;
+        actionError = null;
+        try
+        {
+            await DocService.DeleteDebtItemAsync(selected.Id, itemId, Session.CurrentUser.Id);
+            suppIds.Remove(itemId);
+            await ReloadSelectedAsync(resetState: true);
+            await OnDocumentChanged.InvokeAsync();
+            actionMessage = "Đã xóa chứng từ nợ";
+        }
+        catch (Exception e) { actionError = e.Message; }
+    }
+
+    void ToggleSupp(Guid id, bool check) { if (check) suppIds.Add(id); else suppIds.Remove(id); }
+
+    async Task SupplementItems()
+    {
+        if (selected == null || suppIds.Count == 0 || isSubmitting) return;
+        isSubmitting = true;
+        actionError = null;
+        actionMessage = null;
+        try
+        {
+            await DocService.SupplementItemsAsync(selected.Id, new SupplementItemsRequest(suppIds.ToList(), "Bổ sung chứng từ nợ"), Session.CurrentUser!.Id);
+            suppIds.Clear();
+            await ReloadSelectedAsync(resetState: true);
+            await OnDocumentChanged.InvokeAsync();
+            actionMessage = "Bổ sung thành công";
+        }
+        catch (Exception e) { actionError = e.Message; }
+        finally { isSubmitting = false; }
+    }
+
+    void ToggleVerify(Guid id, bool check) { if (check) verifyIds.Add(id); else verifyIds.Remove(id); }
+
+    async Task VerifyPkhItems()
+    {
+        if (selected == null || verifyIds.Count == 0 || isSubmitting) return;
+        isSubmitting = true;
+        actionError = null;
+        actionMessage = null;
+        try
+        {
+            await DocService.VerifySupplementItemsAsync(selected.Id, new VerifySupplementItemsRequest(verifyIds.ToList()), Session.CurrentUser!.Id);
+            verifyIds.Clear();
+            await ReloadSelectedAsync(resetState: true);
+            await OnDocumentChanged.InvokeAsync();
+            actionMessage = IsDirectPdv
+                ? "Đã xác nhận nhận chứng từ bổ sung từ PKH (PDV)"
+                : "Đã xác nhận nhận chứng từ bổ sung từ PKH";
+        }
+        catch (Exception e) { actionError = e.Message; }
+        finally { isSubmitting = false; }
+    }
+
+    void ToggleVerifyPqln(Guid id, bool check) { if (check) verifyPqlnIds.Add(id); else verifyPqlnIds.Remove(id); }
+
+    async Task VerifyPqlnItems()
+    {
+        if (selected == null || verifyPqlnIds.Count == 0 || isSubmitting) return;
+        isSubmitting = true;
+        actionError = null;
+        actionMessage = null;
+        try
+        {
+            await DocService.VerifyPqlnSupplementItemsAsync(selected.Id, new VerifyPqlnSupplementItemsRequest(verifyPqlnIds.ToList()), Session.CurrentUser!.Id);
+            verifyPqlnIds.Clear();
+            await ReloadSelectedAsync(resetState: true);
+            await OnDocumentChanged.InvokeAsync();
+            actionMessage = "Đã xác nhận nhận chứng từ bổ sung từ PQLN";
+        }
+        catch (Exception e) { actionError = e.Message; }
+        finally { isSubmitting = false; }
+    }
+
+    async Task Act(Func<Task> f)
+    {
+        if (isSubmitting) return;
+        isSubmitting = true;
+        actionMessage = null;
+        actionError = null;
+        try
+        {
+            await f();
+            actionMessage = "Thành công";
+            await OnDocumentChanged.InvokeAsync();
+            await ReloadSelectedAsync(resetState: false);
+        }
+        catch (Exception e)
+        {
+            actionError = e.Message;
+            await OnDocumentChanged.InvokeAsync();
+            try { await ReloadSelectedAsync(resetState: false); }
+            catch (UnauthorizedAccessException) { await CloseAsync(); }
+        }
+        finally { isSubmitting = false; }
+    }
+
+    string NoteOr(string fallback) => string.IsNullOrWhiteSpace(approvalNote) ? fallback : approvalNote.Trim();
+
+    Task ApprovePkh() => Act(async () =>
+    {
+        var fallback = IsDirectPdv
+            ? "SUP PKH đã duyệt và chuyển thẳng hồ sơ sang PDV"
+            : "SUP PKH đã duyệt và chuyển hồ sơ sang PQLN";
+        await DocService.PkhSupApproveAsync(selected!.Id, NoteOr(fallback), Session.CurrentUser!.Id);
+        approvalNote = "";
+    });
+    Task ReceivePqln() => Act(() => DocService.PqlnTakeOwnershipAsync(selected!.Id, Session.CurrentUser!.Id));
+    Task SubmitPqln() => Act(async () => { await DocService.PqlnSubmitSupAsync(selected!.Id, NoteOr("Kiểm tra và gửi SUP PQLN phê duyệt"), Session.CurrentUser!.Id); approvalNote = ""; });
+    Task ApprovePqln() => Act(async () => { await DocService.PqlnSupApproveAsync(selected!.Id, NoteOr("SUP duyệt hồ sơ"), Session.CurrentUser!.Id); approvalNote = ""; });
+    Task ReceivePdv() => Act(() => DocService.PdvTakeOwnershipAsync(selected!.Id, Session.CurrentUser!.Id));
+    Task PostEntry() => Act(async () => { await DocService.PdvPostEntryAsync(selected!.Id, NoteOr("Thực hiện đi bút toán"), Session.CurrentUser!.Id); approvalNote = ""; });
+    Task ApprovePdv() => Act(async () => { await DocService.PdvSupApproveAsync(selected!.Id, NoteOr("SUP PDV kiểm tra và duyệt hoàn tất"), Session.CurrentUser!.Id); approvalNote = ""; });
+}

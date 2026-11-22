@@ -1,4 +1,4 @@
-﻿using DebtManagement.Application.DTOs;
+using DebtManagement.Shared.DTOs;
 
 namespace DebtManagement.Application.Interfaces;
 

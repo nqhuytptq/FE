@@ -1,4 +1,4 @@
-namespace DebtManagement.Application.DTOs;
+namespace DebtManagement.Shared.DTOs;
 
 public record DepartmentDto(Guid Id, string Name, string Code, string? Description, int SortOrder);
 public record AppUserDto(Guid Id, string Name, string Email, string Role, Guid? DepartmentId, string? DepartmentName, string? DepartmentCode, bool IsActive, DateTime CreatedAt);
