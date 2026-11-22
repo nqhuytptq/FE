@@ -1,3 +1,0 @@
-﻿<Project>
-  <Import Project="..\buildMultiTargeting\DebtManagement.BlazorApp.props" />
-</Project>

@@ -13,3 +13,7 @@ publish/
 Thumbs.db
 *.local.json
 appsettings.Local.json
+[Bb]in/
+[Oo]bj/
+.vs/
+*.user

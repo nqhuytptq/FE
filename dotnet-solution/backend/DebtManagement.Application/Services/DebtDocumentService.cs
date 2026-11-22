@@ -9,11 +9,19 @@ public class DebtDocumentService(
     IDepartmentRepository departments,
     IUserRepository users) : IDebtDocumentService
 {
+    public const string WorkflowStandard = "pkh_pqln_pdv";
+    public const string WorkflowDirectPdv = "pkh_pdv";
+
     // ===== Mapping =====
-    private static bool IsItemCompleted(DebtItem x, Guid? pkhDeptId = null, Guid? pqlnDeptId = null)
+    private static bool IsItemCompleted(DebtItem x, string workflowType, Guid? pkhDeptId = null, Guid? pqlnDeptId = null)
     {
         if (!x.IsSupplemented) return false;
 
+        // Luồng chuyển thẳng PKH -> PDV: chứng từ PKH được xác nhận trực tiếp bởi PDV
+        if (NormalizeWorkflowType(workflowType) == WorkflowDirectPdv)
+            return x.IsVerifiedByPdv;
+
+        // Luồng tiêu chuẩn PKH -> PQLN -> PDV
         var isPkhItem = x.SourceDepartment?.Code == "PKH"
             || x.SourceDepartmentId == null
             || (pkhDeptId.HasValue && x.SourceDepartmentId == pkhDeptId.Value);
@@ -27,16 +35,22 @@ public class DebtDocumentService(
     }
 
     private static int SupplementedCount(DebtDocument d, Guid? pkhDeptId = null, Guid? pqlnDeptId = null)
-        => d.DebtItems.Count(x => IsItemCompleted(x, pkhDeptId, pqlnDeptId));
+        => d.DebtItems.Count(x => IsItemCompleted(x, d.WorkflowType, pkhDeptId, pqlnDeptId));
 
     private static string NormalizeCustomerType(string? raw)
         => string.Equals(raw?.Trim(), "individual", StringComparison.OrdinalIgnoreCase)
             ? "individual"
             : "company";
 
+    private static string NormalizeWorkflowType(string? raw)
+        => string.Equals(raw?.Trim(), WorkflowDirectPdv, StringComparison.OrdinalIgnoreCase)
+            ? WorkflowDirectPdv
+            : WorkflowStandard;
+
     private static DebtDocumentDto Map(DebtDocument d, Guid? pkhDeptId = null, Guid? pqlnDeptId = null) => new(
         d.Id, d.DocumentNumber, d.CustomerName, d.CustomerCif,
         NormalizeCustomerType(d.CustomerType),
+        NormalizeWorkflowType(d.WorkflowType),
         d.IssueDate.ToString("yyyy-MM-dd"), d.DueDate.ToString("yyyy-MM-dd"),
         d.CurrentDepartmentId, d.CurrentDepartment?.Name, d.CurrentDepartment?.Code,
         d.Status.ToString(), d.Priority.ToString().ToLower(),
@@ -77,13 +91,18 @@ public class DebtDocumentService(
         return (user, dept);
     }
 
-    /// <summary>Quyền xem hồ sơ: admin/manager xem toàn bộ; nhân viên chỉ xem hồ sơ của mình.</summary>
-/// <summary>Quyền xem hồ sơ: admin/SUP PKH xem toàn bộ; SUP PQLN xem hồ sơ từ khi chuyển sang PQLN; SUP PDV xem hồ sơ từ khi chuyển sang PDV; nhân viên chỉ xem hồ sơ của mình.</summary>
+    /// <summary>Quyền xem hồ sơ: admin/SUP PKH xem toàn bộ; SUP PQLN xem hồ sơ từ khi chuyển sang PQLN; SUP PDV xem hồ sơ từ khi chuyển sang PDV; nhân viên chỉ xem hồ sơ của mình.</summary>
     private static bool CanView(AppUser user, Department? dept, DebtDocument d)
     {
         if (user.Role == "admin") return true;
 
         var code = dept?.Code;
+        var wf = NormalizeWorkflowType(d.WorkflowType);
+
+        // Phòng PQLN không xem được các hồ sơ thuộc luồng chuyển thẳng PKH -> PDV
+        if (code == "PQLN" && wf == WorkflowDirectPdv)
+            return false;
+
         if (user.Role == "manager")
         {
             if (code == "PQLN")
@@ -124,7 +143,8 @@ public class DebtDocumentService(
         if (user.Role is "admin" or "manager") return false;
         var code = dept?.Code;
         if (code == "PKH") return d.CreatedByUserId == user.Id && d.CurrentDepartmentId == dept!.Id;
-        if (code == "PQLN") return (d.CurrentDepartmentId == dept?.Id && d.Status == DocumentStatus.PqlnPendingReceive) || d.PqlnReceiverId == user.Id;
+        if (code == "PQLN" && NormalizeWorkflowType(d.WorkflowType) == WorkflowStandard)
+            return (d.CurrentDepartmentId == dept?.Id && d.Status == DocumentStatus.PqlnPendingReceive) || d.PqlnReceiverId == user.Id;
         return false;
     }
 
@@ -175,6 +195,7 @@ public class DebtDocumentService(
         return new(
             d.Id, d.DocumentNumber, d.CustomerName, d.CustomerCif,
             NormalizeCustomerType(d.CustomerType),
+            NormalizeWorkflowType(d.WorkflowType),
             d.IssueDate.ToString("yyyy-MM-dd"), d.DueDate.ToString("yyyy-MM-dd"),
             d.CurrentDepartmentId, d.CurrentDepartment?.Name, d.CurrentDepartment?.Code,
             d.Status.ToString(), d.Priority.ToString().ToLower(),
@@ -200,6 +221,7 @@ public class DebtDocumentService(
             ?? throw new InvalidOperationException("Không tìm thấy phòng ban PKH");
         var pqln = await departments.GetByCodeAsync("PQLN");
         var nowVn = DateTime.UtcNow.AddHours(7);
+        var workflowType = NormalizeWorkflowType(r.WorkflowType);
 
         var d = new DebtDocument
         {
@@ -207,6 +229,7 @@ public class DebtDocumentService(
             CustomerName = r.CustomerName.Trim(),
             CustomerCif = string.IsNullOrWhiteSpace(r.CustomerCif) ? null : r.CustomerCif.Trim(),
             CustomerType = NormalizeCustomerType(r.CustomerType),
+            WorkflowType = workflowType,
             IssueDate = DateOnly.FromDateTime(nowVn),
             DueDate = DateOnly.Parse(r.DueDate),
             CurrentDepartmentId = pkh.Id,
@@ -235,9 +258,10 @@ public class DebtDocumentService(
         if (debtItems.Count > 0)
             await docs.AddDebtItemsAsync(debtItems);
 
+        var flowTag = workflowType == WorkflowDirectPdv ? " [Luồng chuyển thẳng PDV]" : "";
         var createNote = debtItems.Count > 0
-            ? $"Khởi tạo hồ sơ tại phòng Khách hàng (Chứng từ nợ: {string.Join(", ", debtItems.Select(x => x.ItemName))}) và gửi SUP PKH"
-            : "Khởi tạo hồ sơ tại phòng Khách hàng và gửi SUP PKH";
+            ? $"Khởi tạo hồ sơ{flowTag} tại phòng Khách hàng (Chứng từ nợ: {string.Join(", ", debtItems.Select(x => x.ItemName))}) và gửi SUP PKH"
+            : $"Khởi tạo hồ sơ{flowTag} tại phòng Khách hàng và gửi SUP PKH";
 
         await AddHistory(d.Id, null, pkh.Id, CirculationAction.Created,
             DocumentStatus.PkhPendingSup, uid, createNote);
@@ -257,6 +281,8 @@ public class DebtDocumentService(
         d.CustomerName = r.CustomerName.Trim();
         d.CustomerCif = string.IsNullOrWhiteSpace(r.CustomerCif) ? null : r.CustomerCif.Trim();
         d.CustomerType = NormalizeCustomerType(r.CustomerType);
+        if (d.Status == DocumentStatus.PkhPendingSup)
+            d.WorkflowType = NormalizeWorkflowType(r.WorkflowType);
         d.DueDate = DateOnly.Parse(r.DueDate);
         d.Priority = Enum.TryParse<DocumentPriority>(r.Priority, true, out var parsedPriority) ? parsedPriority : DocumentPriority.Normal;
         d.Notes = r.Notes;
@@ -303,14 +329,52 @@ public class DebtDocumentService(
             Notes = note
         });
 
-    public Task PkhSupApproveAsync(Guid id, string? n, Guid u)
-        => ChangeDept(id, u, "PQLN", DocumentStatus.PqlnPendingReceive, CirculationAction.PkhSupApproved, n ?? "SUP PKH đã duyệt và chuyển hồ sơ sang PQLN");
+    public async Task PkhSupApproveAsync(Guid id, string? n, Guid u)
+    {
+        var d = await docs.GetByIdAsync(id) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
+        var isDirectPdv = NormalizeWorkflowType(d.WorkflowType) == WorkflowDirectPdv;
 
-    public Task PqlnSubmitSupAsync(Guid id, string? n, Guid u)
-        => ChangeDept(id, u, "PQLN", DocumentStatus.PqlnPendingSup, CirculationAction.PqlnSubmittedSup, n ?? "Cán bộ PQLN đã kiểm tra và đẩy hồ sơ lên SUP PQLN duyệt");
+        d.SupPkhApprovedAt = DateTime.UtcNow;
+        d.SupPkhApproverId = u;
+        await docs.UpdateAsync(d);
 
-    public Task PqlnSupApproveAsync(Guid id, string? n, Guid u)
-        => ChangeDept(id, u, "PDV", DocumentStatus.PdvPendingReceive, CirculationAction.PqlnSupApproved, n ?? "SUP PQLN đã duyệt và chuyển hồ sơ sang PDV");
+        if (isDirectPdv)
+        {
+            var note = string.IsNullOrWhiteSpace(n) || n.Trim().Equals("SUP duyệt hồ sơ", StringComparison.OrdinalIgnoreCase)
+                ? "SUP PKH đã duyệt và chuyển thẳng hồ sơ sang PDV"
+                : n.Trim();
+            await ChangeDept(id, u, "PDV", DocumentStatus.PdvPendingReceive, CirculationAction.PkhSupApproved, note);
+        }
+        else
+        {
+            var note = string.IsNullOrWhiteSpace(n)
+                ? "SUP PKH đã duyệt và chuyển hồ sơ sang PQLN"
+                : n.Trim();
+            await ChangeDept(id, u, "PQLN", DocumentStatus.PqlnPendingReceive, CirculationAction.PkhSupApproved, note);
+        }
+    }
+
+    public async Task PqlnSubmitSupAsync(Guid id, string? n, Guid u)
+    {
+        var d = await docs.GetByIdAsync(id) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
+        if (NormalizeWorkflowType(d.WorkflowType) == WorkflowDirectPdv)
+            throw new InvalidOperationException("Hồ sơ luồng chuyển thẳng PDV không đi qua PQLN.");
+
+        await ChangeDept(id, u, "PQLN", DocumentStatus.PqlnPendingSup, CirculationAction.PqlnSubmittedSup, n ?? "Cán bộ PQLN đã kiểm tra và đẩy hồ sơ lên SUP PQLN duyệt");
+    }
+
+    public async Task PqlnSupApproveAsync(Guid id, string? n, Guid u)
+    {
+        var d = await docs.GetByIdAsync(id) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
+        if (NormalizeWorkflowType(d.WorkflowType) == WorkflowDirectPdv)
+            throw new InvalidOperationException("Hồ sơ luồng chuyển thẳng PDV không đi qua PQLN.");
+
+        d.SupPqlnApprovedAt = DateTime.UtcNow;
+        d.SupPqlnApproverId = u;
+        await docs.UpdateAsync(d);
+
+        await ChangeDept(id, u, "PDV", DocumentStatus.PdvPendingReceive, CirculationAction.PqlnSupApproved, n ?? "SUP PQLN đã duyệt và chuyển hồ sơ sang PDV");
+    }
 
     public async Task PdvTakeOwnershipAsync(Guid id, Guid u)
     {
@@ -345,7 +409,7 @@ public class DebtDocumentService(
         await AddHistory(id, dept.Id, dept.Id, CirculationAction.PdvReceived, DocumentStatus.PdvReceived, u, "Cán bộ Giao dịch PDV đã tiếp nhận hồ sơ");
     }
 
-public async Task PdvPostEntryAsync(Guid id, string? n, Guid u)
+    public async Task PdvPostEntryAsync(Guid id, string? n, Guid u)
     {
         var (user, dept) = await GetActorAsync(u);
         if (dept?.Code != "PDV" || user.Role != "staff")
@@ -371,6 +435,7 @@ public async Task PdvPostEntryAsync(Guid id, string? n, Guid u)
 
         await AddHistory(id, d.CurrentDepartmentId, d.CurrentDepartmentId, CirculationAction.PdvEntryPosted, d.Status, u, note);
     }
+
     public async Task PdvSupApproveAsync(Guid id, string? n, Guid u)
     {
         var (user, dept) = await GetActorAsync(u);
@@ -388,7 +453,7 @@ public async Task PdvPostEntryAsync(Guid id, string? n, Guid u)
 
         var pkh = await departments.GetByCodeAsync("PKH");
         var pqln = await departments.GetByCodeAsync("PQLN");
-        var unsupItems = d.DebtItems.Where(x => !IsItemCompleted(x, pkh?.Id, pqln?.Id)).ToList();
+        var unsupItems = d.DebtItems.Where(x => !IsItemCompleted(x, d.WorkflowType, pkh?.Id, pqln?.Id)).ToList();
         var allSupplemented = unsupItems.Count == 0;
         var isDefaultUiNote = string.IsNullOrWhiteSpace(n)
             || n.Trim().Equals("SUP PDV kiểm tra và duyệt hoàn tất", StringComparison.OrdinalIgnoreCase);
@@ -460,6 +525,7 @@ public async Task PdvPostEntryAsync(Guid id, string? n, Guid u)
                      && d.CreatedByUserId == u,
 
             "PQLN" => isStaff
+                      && NormalizeWorkflowType(d.WorkflowType) == WorkflowStandard
                       && d.Status is DocumentStatus.PqlnReceived or DocumentStatus.PqlnPendingSup
                       && d.PqlnReceiverId == u,
 
@@ -518,6 +584,7 @@ public async Task PdvPostEntryAsync(Guid id, string? n, Guid u)
                      && item.SourceDepartmentId == dept.Id,
 
             "PQLN" => isStaff
+                      && NormalizeWorkflowType(document.WorkflowType) == WorkflowStandard
                       && document.Status is DocumentStatus.PqlnReceived or DocumentStatus.PqlnPendingSup
                       && document.PqlnReceiverId == userId
                       && item.SourceDepartmentId == dept.Id,
@@ -570,7 +637,7 @@ public async Task PdvPostEntryAsync(Guid id, string? n, Guid u)
         var allowed = dept?.Code switch
         {
             "PKH" => isStaff && d.CreatedByUserId == u,
-            "PQLN" => isStaff && d.PqlnReceiverId == u,
+            "PQLN" => isStaff && NormalizeWorkflowType(d.WorkflowType) == WorkflowStandard && d.PqlnReceiverId == u,
             _ => false
         };
         if (!allowed || dept == null)
@@ -616,14 +683,25 @@ public async Task PdvPostEntryAsync(Guid id, string? n, Guid u)
     public async Task VerifySupplementItemsAsync(Guid id, VerifySupplementItemsRequest r, Guid u)
     {
         var (user, dept) = await GetActorAsync(u);
-        if (dept?.Code != "PQLN" || user.Role != "staff")
-            throw new UnauthorizedAccessException("Chỉ nhân viên phòng PQLN mới có quyền xác nhận chứng từ bổ sung từ PKH.");
-
         var d = await docs.GetDetailByIdAsync(id)
             ?? throw new InvalidOperationException("Hồ sơ không tồn tại.");
 
-        if (d.PqlnReceiverId != u)
-            throw new UnauthorizedAccessException("Chỉ cán bộ PQLN đang thụ lý hồ sơ này mới được xác nhận.");
+        var isDirectPdv = NormalizeWorkflowType(d.WorkflowType) == WorkflowDirectPdv;
+
+        if (isDirectPdv)
+        {
+            if (dept?.Code != "PDV" || user.Role != "staff")
+                throw new UnauthorizedAccessException("Chỉ nhân viên phòng PDV mới có quyền xác nhận chứng từ bổ sung từ PKH cho luồng này.");
+            if (d.PdvReceiverId != u)
+                throw new UnauthorizedAccessException("Chỉ cán bộ PDV đang thụ lý hồ sơ này mới được xác nhận.");
+        }
+        else
+        {
+            if (dept?.Code != "PQLN" || user.Role != "staff")
+                throw new UnauthorizedAccessException("Chỉ nhân viên phòng PQLN mới có quyền xác nhận chứng từ bổ sung từ PKH.");
+            if (d.PqlnReceiverId != u)
+                throw new UnauthorizedAccessException("Chỉ cán bộ PQLN đang thụ lý hồ sơ này mới được xác nhận.");
+        }
 
         var pkh = await departments.GetByCodeAsync("PKH")
             ?? throw new InvalidOperationException("Không tìm thấy phòng ban PKH.");
@@ -644,10 +722,20 @@ public async Task PdvPostEntryAsync(Guid id, string? n, Guid u)
         var now = DateTime.UtcNow;
         foreach (var x in targetItems)
         {
-            if (x.IsVerifiedByPqln) continue;
-            x.IsVerifiedByPqln = true;
-            x.PqlnVerifiedAt = now;
-            x.PqlnVerifiedByUserId = u;
+            if (isDirectPdv)
+            {
+                if (x.IsVerifiedByPdv) continue;
+                x.IsVerifiedByPdv = true;
+                x.PdvVerifiedAt = now;
+                x.PdvVerifiedByUserId = u;
+            }
+            else
+            {
+                if (x.IsVerifiedByPqln) continue;
+                x.IsVerifiedByPqln = true;
+                x.PqlnVerifiedAt = now;
+                x.PqlnVerifiedByUserId = u;
+            }
             await docs.UpdateDebtItemAsync(x);
             verifiedNames.Add(x.ItemName);
         }
@@ -656,8 +744,9 @@ public async Task PdvPostEntryAsync(Guid id, string? n, Guid u)
             throw new InvalidOperationException("Các chứng từ đã chọn đều đã được xác nhận trước đó.");
 
         var itemsText = string.Join(", ", verifiedNames);
+        var verifierDeptCode = isDirectPdv ? "PDV" : "PQLN";
         var note = string.IsNullOrWhiteSpace(r.Notes)
-            ? $"NV PQLN xác nhận đã nhận chứng từ bổ sung từ PKH: {itemsText}"
+            ? $"NV {verifierDeptCode} xác nhận đã nhận chứng từ bổ sung từ PKH: {itemsText}"
             : $"{r.Notes.Trim()} ({itemsText})";
 
         await AddHistory(id, d.CurrentDepartmentId, d.CurrentDepartmentId, CirculationAction.Supplemented, d.Status, u, note);
@@ -671,6 +760,9 @@ public async Task PdvPostEntryAsync(Guid id, string? n, Guid u)
 
         var d = await docs.GetDetailByIdAsync(id)
             ?? throw new InvalidOperationException("Hồ sơ không tồn tại.");
+
+        if (NormalizeWorkflowType(d.WorkflowType) == WorkflowDirectPdv)
+            throw new InvalidOperationException("Hồ sơ luồng chuyển thẳng PDV không có chứng từ từ PQLN.");
 
         if (d.PdvReceiverId != u)
             throw new UnauthorizedAccessException("Chỉ cán bộ PDV đang thụ lý hồ sơ này mới được xác nhận.");
@@ -721,6 +813,9 @@ public async Task PdvPostEntryAsync(Guid id, string? n, Guid u)
 
         var d = await docs.GetDetailByIdAsync(id)
             ?? throw new InvalidOperationException("Hồ sơ không tồn tại.");
+
+        if (NormalizeWorkflowType(d.WorkflowType) == WorkflowDirectPdv)
+            throw new InvalidOperationException("Hồ sơ luồng chuyển thẳng PDV không đi qua PQLN.");
 
         if (d.CurrentDepartmentId != dept.Id)
             throw new InvalidOperationException("Hồ sơ hiện không nằm tại phòng PQLN.");

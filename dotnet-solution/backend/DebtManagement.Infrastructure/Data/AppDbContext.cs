@@ -55,6 +55,8 @@ public class AppDbContext : DbContext
             e.Property(d => d.CustomerCif).HasColumnName("customer_cif").HasMaxLength(50);
             e.Property(d => d.CustomerType).HasColumnName("customer_type")
              .HasConversion<string?>().HasMaxLength(20);
+            e.Property(d => d.WorkflowType).HasColumnName("workflow_type")
+             .HasMaxLength(30).HasDefaultValue("pkh_pqln_pdv");
             e.Property(d => d.IssueDate).HasColumnName("issue_date");
             e.Property(d => d.DueDate).HasColumnName("due_date");
             e.Property(d => d.CurrentDepartmentId).HasColumnName("current_department_id");

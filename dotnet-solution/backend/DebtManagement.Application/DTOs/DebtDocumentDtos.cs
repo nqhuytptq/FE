@@ -37,37 +37,80 @@ public record AddDebtItemsRequest(List<CreateDebtItemRequest> Items, string? Not
 public record UpdateDebtItemRequest(string ItemName, string? Notes);
 
 public record DebtDocumentDto(
-    Guid Id, string DocumentNumber, string CustomerName, string? CustomerCif, string? CustomerType,
-    string IssueDate, string DueDate,
-    Guid? CurrentDepartmentId, string? CurrentDepartmentName, string? CurrentDepartmentCode,
-    string Status, string Priority, string? Notes,
+    Guid Id,
+    string DocumentNumber,
+    string CustomerName,
+    string? CustomerCif,
+    string CustomerType,
+    string WorkflowType,
+    string IssueDate,
+    string DueDate,
+    Guid? CurrentDepartmentId,
+    string? CurrentDepartmentName,
+    string? CurrentDepartmentCode,
+    string Status,
+    string Priority,
+    string? Notes,
     bool HasDebtDocuments,
-    Guid? CreatedByUserId, string? CreatedByUserName,
-    Guid? PqlnReceiverId, string? PqlnReceiverName, DateTime? PqlnReceivedAt,
-    Guid? PdvReceiverId, string? PdvReceiverName, DateTime? PdvReceivedAt,
-    DateTime? EntryPostedAt, DateTime? CompletedAt,
-    int TotalDebtItems, int SupplementedDebtItems,
-    DateTime CreatedAt, DateTime UpdatedAt);
+    Guid? CreatedByUserId,
+    string? CreatedByUserName,
+    Guid? PqlnReceiverId,
+    string? PqlnReceiverName,
+    DateTime? PqlnReceivedAt,
+    Guid? PdvReceiverId,
+    string? PdvReceiverName,
+    DateTime? PdvReceivedAt,
+    DateTime? EntryPostedAt,
+    DateTime? CompletedAt,
+    int TotalDebtItems,
+    int SupplementedDebtItems,
+    DateTime CreatedAt,
+    DateTime UpdatedAt);
 
 public record DebtDocumentDetailDto(
-    Guid Id, string DocumentNumber, string CustomerName, string? CustomerCif, string? CustomerType,
-    string IssueDate, string DueDate,
-    Guid? CurrentDepartmentId, string? CurrentDepartmentName, string? CurrentDepartmentCode,
-    string Status, string Priority, string? Notes,
+    Guid Id,
+    string DocumentNumber,
+    string CustomerName,
+    string? CustomerCif,
+    string CustomerType,
+    string WorkflowType,
+    string IssueDate,
+    string DueDate,
+    Guid? CurrentDepartmentId,
+    string? CurrentDepartmentName,
+    string? CurrentDepartmentCode,
+    string Status,
+    string Priority,
+    string? Notes,
     bool HasDebtDocuments,
-    Guid? CreatedByUserId, string? CreatedByUserName, DateTime CreatedAt,
-    DateTime? SupPkhApprovedAt, Guid? SupPkhApproverId, string? SupPkhApproverName,
-    Guid? PqlnReceiverId, string? PqlnReceiverName, DateTime? PqlnReceivedAt,
-    DateTime? SupPqlnApprovedAt, Guid? SupPqlnApproverId, string? SupPqlnApproverName,
-    Guid? PdvReceiverId, string? PdvReceiverName, DateTime? PdvReceivedAt,
-    DateTime? EntryPostedAt, Guid? EntryPostedById, string? EntryPostedByName,
-    DateTime? SupPdvApprovedEntryAt, Guid? SupPdvEntryApproverId, string? SupPdvEntryApproverName,
-    DateTime? CompletedAt, Guid? CompletedByUserId, string? CompletedByUserName,
+    Guid? CreatedByUserId,
+    string? CreatedByUserName,
+    DateTime CreatedAt,
+    DateTime? SupPkhApprovedAt,
+    Guid? SupPkhApproverId,
+    string? SupPkhApproverName,
+    Guid? PqlnReceiverId,
+    string? PqlnReceiverName,
+    DateTime? PqlnReceivedAt,
+    DateTime? SupPqlnApprovedAt,
+    Guid? SupPqlnApproverId,
+    string? SupPqlnApproverName,
+    Guid? PdvReceiverId,
+    string? PdvReceiverName,
+    DateTime? PdvReceivedAt,
+    DateTime? EntryPostedAt,
+    Guid? EntryPostedById,
+    string? EntryPostedByName,
+    DateTime? SupPdvApprovedEntryAt,
+    Guid? SupPdvEntryApproverId,
+    string? SupPdvEntryApproverName,
+    DateTime? CompletedAt,
+    Guid? CompletedByUserId,
+    string? CompletedByUserName,
     DateTime UpdatedAt,
-    List<DebtItemDto> DebtItems,
-    List<CirculationHistoryDto> CirculationHistory,
-    List<EditLogDto> EditLogs);
-
+    IReadOnlyList<DebtItemDto> DebtItems,
+    IReadOnlyList<CirculationHistoryDto> CirculationHistory,
+    IReadOnlyList<EditLogDto> EditLogs);
 public record CirculationHistoryDto(
     Guid Id, Guid? FromDepartmentId, string? FromDepartmentName,
     Guid? ToDepartmentId, string? ToDepartmentName,
@@ -88,6 +131,7 @@ public class CreateDebtDocumentRequest
     public string CustomerName { get; set; } = string.Empty;
     public string? CustomerCif { get; set; }
     public string CustomerType { get; set; } = "company";
+    public string WorkflowType { get; set; } = "pkh_pqln_pdv";
     public string IssueDate { get; set; } = string.Empty;
     public string DueDate { get; set; } = string.Empty;
     public string Priority { get; set; } = "normal";
@@ -100,7 +144,8 @@ public class UpdateDebtDocumentRequest
 {
     public string CustomerName { get; set; } = string.Empty;
     public string? CustomerCif { get; set; }
-    public string? CustomerType { get; set; }
+    public string CustomerType { get; set; } = "company";
+    public string WorkflowType { get; set; } = "pkh_pqln_pdv";
     public string IssueDate { get; set; } = string.Empty;
     public string DueDate { get; set; } = string.Empty;
     public string Priority { get; set; } = "normal";

@@ -35,8 +35,9 @@ public class DebtDocument
     public Guid Id { get; set; } = Guid.NewGuid();
     public string DocumentNumber { get; set; } = string.Empty;
     public string CustomerName { get; set; } = string.Empty;
-public string? CustomerCif { get; set; }
-public string CustomerType { get; set; } = "company"; // "company" | "individual"
+    public string? CustomerCif { get; set; }
+    public string CustomerType { get; set; } = "company"; // "company" | "individual"
+    public string WorkflowType { get; set; } = "pkh_pqln_pdv"; // "pkh_pqln_pdv" | "pkh_pdv"
     public DateOnly IssueDate { get; set; }
     public DateOnly DueDate { get; set; }
     public Guid? CurrentDepartmentId { get; set; }
