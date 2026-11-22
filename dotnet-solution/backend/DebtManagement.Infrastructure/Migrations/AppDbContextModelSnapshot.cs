@@ -83,7 +83,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "admin@vcb.com",
                             IsActive = true,
                             Name = "Quản trị viên",
-                            PasswordHash = "$2a$11$N1vZDI.HqpGNBn8T3/nm/e0A/s4lu8p1oW7IJOsuBJyfh65PfpVdK",
+                            PasswordHash = "$2a$11$hzEIXhYXq/REvqHRbD3sXOxnY2Zta9mVyUUTlX7WXiXNH1jSjR3eG",
                             Role = "admin"
                         },
                         new
@@ -94,7 +94,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "nv.pkh@vcb.com",
                             IsActive = true,
                             Name = "Nguyễn Văn Khách Hàng (NV)",
-                            PasswordHash = "$2a$11$MWquEAKkTP.JDmzYv37wOeapoHaemfBCv83nuot6VHRB7/7NYslWO",
+                            PasswordHash = "$2a$11$0uO5GSUPpQxlldM5MVhNh.PJK92drcRU5ftDZAl2MIcnScVbWvDtK",
                             Role = "staff"
                         },
                         new
@@ -105,7 +105,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "sup.pkh@vcb.com",
                             IsActive = true,
                             Name = "Trần Trưởng Phòng KH (SUP)",
-                            PasswordHash = "$2a$11$84iRSFITdkdsUpMIbJ8JR.EoGvVbeskJ0rGKZiggPvqNv6koPc9vW",
+                            PasswordHash = "$2a$11$g7V5745bze8SRwOKF7R.Z.bA/R53VdEiK0HpZoUzViCArSR0elh7q",
                             Role = "manager"
                         },
                         new
@@ -116,7 +116,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "nv.pqln@vcb.com",
                             IsActive = true,
                             Name = "Lê Quản Lý Nợ (NV)",
-                            PasswordHash = "$2a$11$MWquEAKkTP.JDmzYv37wOeapoHaemfBCv83nuot6VHRB7/7NYslWO",
+                            PasswordHash = "$2a$11$0uO5GSUPpQxlldM5MVhNh.PJK92drcRU5ftDZAl2MIcnScVbWvDtK",
                             Role = "staff"
                         },
                         new
@@ -127,7 +127,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "sup.pqln@vcb.com",
                             IsActive = true,
                             Name = "Phạm Trưởng Phòng QLN (SUP)",
-                            PasswordHash = "$2a$11$84iRSFITdkdsUpMIbJ8JR.EoGvVbeskJ0rGKZiggPvqNv6koPc9vW",
+                            PasswordHash = "$2a$11$g7V5745bze8SRwOKF7R.Z.bA/R53VdEiK0HpZoUzViCArSR0elh7q",
                             Role = "manager"
                         },
                         new
@@ -138,7 +138,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "nv.pdv@vcb.com",
                             IsActive = true,
                             Name = "Hoàng Dịch Vụ KH (NV)",
-                            PasswordHash = "$2a$11$MWquEAKkTP.JDmzYv37wOeapoHaemfBCv83nuot6VHRB7/7NYslWO",
+                            PasswordHash = "$2a$11$0uO5GSUPpQxlldM5MVhNh.PJK92drcRU5ftDZAl2MIcnScVbWvDtK",
                             Role = "staff"
                         },
                         new
@@ -149,7 +149,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "sup.pdv@vcb.com",
                             IsActive = true,
                             Name = "Vũ Trưởng Phòng DVKH (SUP)",
-                            PasswordHash = "$2a$11$84iRSFITdkdsUpMIbJ8JR.EoGvVbeskJ0rGKZiggPvqNv6koPc9vW",
+                            PasswordHash = "$2a$11$g7V5745bze8SRwOKF7R.Z.bA/R53VdEiK0HpZoUzViCArSR0elh7q",
                             Role = "manager"
                         });
                 });
@@ -237,18 +237,19 @@ namespace DebtManagement.Infrastructure.Migrations
                         .HasColumnType("char(36)")
                         .HasColumnName("current_department_id");
 
+                    b.Property<string>("CustomerCif")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("customer_cif");
+
                     b.Property<string>("CustomerName")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)")
                         .HasColumnName("customer_name");
 
-                    b.Property<string>("CustomerPhone")
-                        .HasMaxLength(20)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("customer_phone");
-
                     b.Property<string>("CustomerType")
+                        .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)")
                         .HasColumnName("customer_type");
@@ -339,6 +340,14 @@ namespace DebtManagement.Infrastructure.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("updated_at");
+
+                    b.Property<string>("WorkflowType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)")
+                        .HasDefaultValue("pkh_pqln_pdv")
+                        .HasColumnName("workflow_type");
 
                     b.HasKey("Id");
 
