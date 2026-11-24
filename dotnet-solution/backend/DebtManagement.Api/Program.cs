@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using DebtManagement.Application.Interfaces;
 using DebtManagement.Application.Services;
 using DebtManagement.Infrastructure.Data;
@@ -45,12 +45,14 @@ builder.Services.AddScoped<IDebtDocumentRepository, DebtDocumentRepository>();
 builder.Services.AddScoped<IDepartmentRepository, DepartmentRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IDebtDocumentService, DebtDocumentService>();
+builder.Services.AddScoped<ISupReportService, SupReportService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IDocumentAuditService, DocumentAuditService>();
 builder.Services.AddScoped<IDebtItemVerificationService, DebtItemVerificationService>();
 builder.Services.AddScoped<IDebtWorkflowService, DebtWorkflowService>();
 builder.Services.AddScoped<IDebtDocumentService, DebtDocumentService>();
+builder.Services.AddScoped<ISupReportService, SupReportService>();
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.PropertyNamingPolicy = null);
 builder.Services.AddEndpointsApiExplorer();

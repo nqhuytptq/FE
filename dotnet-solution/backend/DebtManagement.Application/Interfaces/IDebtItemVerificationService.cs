@@ -10,4 +10,5 @@ public interface IDebtItemVerificationService
     Task SupplementItemsAsync(Guid id, SupplementItemsRequest r, Guid u);
     Task VerifySupplementItemsAsync(Guid id, VerifySupplementItemsRequest r, Guid u);
     Task VerifyPqlnSupplementItemsAsync(Guid id, VerifyPqlnSupplementItemsRequest r, Guid u);
+    Task RejectSupplementItemAsync(Guid documentId, Guid itemId, RejectSupplementItemRequest request, Guid userId);
 }

@@ -13,7 +13,9 @@ public enum DocumentStatus
     PdvEntryPosted,         // Đã đi bút toán (Chờ SUP PDV duyệt)
     PdvEntryApproved,       // SUP PDV đã duyệt bút toán (Chờ bổ sung đủ chứng từ nợ - Luồng 1)
     Completed,              // ĐÃ HOÀN TẤT
-    Rejected                // Từ chối
+    Rejected,               // Từ chối
+    ReturnedToPkh,          // Hồ sơ bị trả lại phòng PKH
+    ReturnedToPqln          // Hồ sơ bị trả lại phòng PQLN
 }
 
 public enum CustomerType
@@ -71,6 +73,13 @@ public class DebtDocument
 
     public DateTime? CompletedAt { get; set; }          // Hoàn thành hồ sơ (Duyệt lần 2 hoặc duyệt lần 1 nếu đủ CT)
     public Guid? CompletedByUserId { get; set; }
+    
+    // --- Thông tin trả lại hiện hành ---
+    public string? ReturnReason { get; set; }
+    public DateTime? ReturnedAt { get; set; }
+    public Guid? ReturnedByUserId { get; set; }
+    public string? ReturnedByUserName { get; set; }
+    public string? ReturnedFromDepartmentCode { get; set; }
 
     // --- Navigation ---
     public Department? CurrentDepartment { get; set; }

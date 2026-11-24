@@ -33,40 +33,46 @@
             <h4 class="fw-bold mb-1" style="font-size: 22px;">Đăng nhập VCB</h4>
             <p class="text-muted small mb-4">Dùng tài khoản email Vietcombank của bạn.</p>
 
-            <div class="mb-3">
-                <label class="form-label small fw-semibold mb-1">Email</label>
-                <div class="vcb-input-wrap">
-                    <span class="vcb-input-icon">✉</span>
-                    <input class="vcb-input" @bind="email" placeholder="ten@vietcombank.com.vn" />
+            <form @onsubmit="LoginAsync" @onsubmit:preventDefault="true">
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold mb-1">Email</label>
+                    <div class="vcb-input-wrap">
+                        <span class="vcb-input-icon">✉</span>
+                        <input class="vcb-input"
+                               @bind="email"
+                               @bind:event="oninput"
+                               placeholder="ten@vietcombank.com.vn" />
+                    </div>
                 </div>
-            </div>
 
-            <div class="mb-4">
-                <label class="form-label small fw-semibold mb-1">Mật khẩu</label>
-                <div class="vcb-input-wrap">
-                    <span class="vcb-input-icon">🔒</span>
-                    <input type="@(showPassword ? "text" : "password")"
-                           class="vcb-input"
-                           style="padding-right: 56px;"
-                           @bind="password"
-                           placeholder="••••••••" />
-                    <button type="button"
-                            class="btn btn-link btn-sm text-decoration-none text-muted position-absolute end-0 me-2"
-                            style="font-size: 12px;"
-                            @onclick="() => showPassword = !showPassword">
-                        @(showPassword ? "Ẩn" : "Hiện")
-                    </button>
+                <div class="mb-4">
+                    <label class="form-label small fw-semibold mb-1">Mật khẩu</label>
+                    <div class="vcb-input-wrap">
+                        <span class="vcb-input-icon">🔒</span>
+                        <input type="@(showPassword ? "text" : "password")"
+                               class="vcb-input"
+                               style="padding-right: 56px;"
+                               @bind="password"
+                               @bind:event="oninput"
+                               placeholder="••••••••" />
+                        <button type="button"
+                                class="btn btn-link btn-sm text-decoration-none text-muted position-absolute end-0 me-2"
+                                style="font-size: 12px;"
+                                @onclick="() => showPassword = !showPassword">
+                            @(showPassword ? "Ẩn" : "Hiện")
+                        </button>
+                    </div>
                 </div>
-            </div>
 
-            @if (loginError != null)
-            {
-                <div class="alert alert-danger py-2 small mb-3">@loginError</div>
-            }
+                @if (loginError != null)
+                {
+                    <div class="alert alert-danger py-2 small mb-3">@loginError</div>
+                }
 
-            <button class="vcb-btn-primary w-100" @onclick="LoginAsync">
-                Đăng nhập →
-            </button>
+                <button type="submit" class="vcb-btn-primary w-100" disabled="@isLoggingIn">
+                    @(isLoggingIn ? "Đang đăng nhập..." : "Đăng nhập →")
+                </button>
+            </form>
         </div>
     </div>
 </div>
@@ -77,12 +83,22 @@
     string email = "";
     string password = "";
     bool showPassword;
+    bool isLoggingIn;
     string? loginError;
 
     async Task LoginAsync()
     {
-        loginError = await Session.LoginAsync(email, password);
-        if (loginError == null)
-            await OnLoginSuccess.InvokeAsync();
+        if (isLoggingIn) return;
+        isLoggingIn = true;
+        try
+        {
+            loginError = await Session.LoginAsync(email, password);
+            if (loginError == null)
+                await OnLoginSuccess.InvokeAsync();
+        }
+        finally
+        {
+            isLoggingIn = false;
+        }
     }
 }

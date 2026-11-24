@@ -83,7 +83,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "admin@vcb.com",
                             IsActive = true,
                             Name = "Quản trị viên",
-                            PasswordHash = "$2a$11$hzEIXhYXq/REvqHRbD3sXOxnY2Zta9mVyUUTlX7WXiXNH1jSjR3eG",
+                            PasswordHash = "$2a$11$TfrXeERMeKnlCrMXlLX7huJ3eaMhzPUTFzqNi6kZjnpuoSM5LhTdy",
                             Role = "admin"
                         },
                         new
@@ -94,7 +94,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "nv.pkh@vcb.com",
                             IsActive = true,
                             Name = "Nguyễn Văn Khách Hàng (NV)",
-                            PasswordHash = "$2a$11$0uO5GSUPpQxlldM5MVhNh.PJK92drcRU5ftDZAl2MIcnScVbWvDtK",
+                            PasswordHash = "$2a$11$0oot4Kit9cXWfhPgEBQREuCN0/dBEZ4bIatZ6Bd06/li7gNUjBwR6",
                             Role = "staff"
                         },
                         new
@@ -105,7 +105,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "sup.pkh@vcb.com",
                             IsActive = true,
                             Name = "Trần Trưởng Phòng KH (SUP)",
-                            PasswordHash = "$2a$11$g7V5745bze8SRwOKF7R.Z.bA/R53VdEiK0HpZoUzViCArSR0elh7q",
+                            PasswordHash = "$2a$11$hhNeG1e2wTVY229bp53MUucIuq8S3U3oFNNviqn/l/SGWNBmrbGQa",
                             Role = "manager"
                         },
                         new
@@ -116,7 +116,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "nv.pqln@vcb.com",
                             IsActive = true,
                             Name = "Lê Quản Lý Nợ (NV)",
-                            PasswordHash = "$2a$11$0uO5GSUPpQxlldM5MVhNh.PJK92drcRU5ftDZAl2MIcnScVbWvDtK",
+                            PasswordHash = "$2a$11$0oot4Kit9cXWfhPgEBQREuCN0/dBEZ4bIatZ6Bd06/li7gNUjBwR6",
                             Role = "staff"
                         },
                         new
@@ -127,7 +127,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "sup.pqln@vcb.com",
                             IsActive = true,
                             Name = "Phạm Trưởng Phòng QLN (SUP)",
-                            PasswordHash = "$2a$11$g7V5745bze8SRwOKF7R.Z.bA/R53VdEiK0HpZoUzViCArSR0elh7q",
+                            PasswordHash = "$2a$11$hhNeG1e2wTVY229bp53MUucIuq8S3U3oFNNviqn/l/SGWNBmrbGQa",
                             Role = "manager"
                         },
                         new
@@ -138,7 +138,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "nv.pdv@vcb.com",
                             IsActive = true,
                             Name = "Hoàng Dịch Vụ KH (NV)",
-                            PasswordHash = "$2a$11$0uO5GSUPpQxlldM5MVhNh.PJK92drcRU5ftDZAl2MIcnScVbWvDtK",
+                            PasswordHash = "$2a$11$0oot4Kit9cXWfhPgEBQREuCN0/dBEZ4bIatZ6Bd06/li7gNUjBwR6",
                             Role = "staff"
                         },
                         new
@@ -149,7 +149,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "sup.pdv@vcb.com",
                             IsActive = true,
                             Name = "Vũ Trưởng Phòng DVKH (SUP)",
-                            PasswordHash = "$2a$11$g7V5745bze8SRwOKF7R.Z.bA/R53VdEiK0HpZoUzViCArSR0elh7q",
+                            PasswordHash = "$2a$11$hhNeG1e2wTVY229bp53MUucIuq8S3U3oFNNviqn/l/SGWNBmrbGQa",
                             Role = "manager"
                         });
                 });
@@ -307,6 +307,29 @@ namespace DebtManagement.Infrastructure.Migrations
                         .HasColumnType("varchar(20)")
                         .HasColumnName("priority");
 
+                    b.Property<string>("ReturnReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)")
+                        .HasColumnName("return_reason");
+
+                    b.Property<DateTime?>("ReturnedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("returned_at");
+
+                    b.Property<Guid?>("ReturnedByUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("returned_by_user_id");
+
+                    b.Property<string>("ReturnedByUserName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("returned_by_user_name");
+
+                    b.Property<string>("ReturnedFromDepartmentCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("returned_from_department_code");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -404,6 +427,11 @@ namespace DebtManagement.Infrastructure.Migrations
                         .HasColumnType("varchar(255)")
                         .HasColumnName("item_name");
 
+                    b.Property<string>("LastRejectReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("last_reject_reason");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
                         .HasColumnType("varchar(1000)")
@@ -424,6 +452,24 @@ namespace DebtManagement.Infrastructure.Migrations
                     b.Property<Guid?>("PqlnVerifiedByUserId")
                         .HasColumnType("char(36)")
                         .HasColumnName("pqln_verified_by_user_id");
+
+                    b.Property<DateTime?>("RejectedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("rejected_at");
+
+                    b.Property<string>("RejectedByDepartmentCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("rejected_by_department_code");
+
+                    b.Property<Guid?>("RejectedByUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("rejected_by_user_id");
+
+                    b.Property<string>("RejectedByUserName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("rejected_by_user_name");
 
                     b.Property<Guid?>("SourceDepartmentId")
                         .HasColumnType("char(36)")

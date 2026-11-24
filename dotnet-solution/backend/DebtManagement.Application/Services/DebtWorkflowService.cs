@@ -10,6 +10,15 @@ public class DebtWorkflowService(
     IUserRepository users,
     IDocumentAuditService audit) : IDebtWorkflowService
 {
+    private static void ClearReturnInfo(DebtDocument d)
+    {
+        d.ReturnReason = null;
+        d.ReturnedAt = null;
+        d.ReturnedByUserId = null;
+        d.ReturnedByUserName = null;
+        d.ReturnedFromDepartmentCode = null;
+    }
+
     private async Task ChangeDeptAsync(Guid id, Guid uid, string code, DocumentStatus status, CirculationAction action, string note)
     {
         var d = await docs.GetByIdAsync(id) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
@@ -17,6 +26,7 @@ public class DebtWorkflowService(
         var from = d.CurrentDepartmentId;
         d.CurrentDepartmentId = dept.Id;
         d.Status = status;
+        ClearReturnInfo(d);
         await docs.UpdateAsync(d);
         await audit.AddHistoryAsync(id, from, dept.Id, action, status, uid, note);
     }
@@ -24,10 +34,14 @@ public class DebtWorkflowService(
     public async Task PkhSupApproveAsync(Guid id, string? n, Guid u)
     {
         var d = await docs.GetByIdAsync(id) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
+        if (d.Status != DocumentStatus.PkhPendingSup)
+            throw new InvalidOperationException("Hồ sơ không ở trạng thái chờ SUP PKH duyệt.");
+
         var isDirectPdv = NormalizeWorkflowType(d.WorkflowType) == WorkflowDirectPdv;
 
         d.SupPkhApprovedAt = DateTime.UtcNow;
         d.SupPkhApproverId = u;
+        ClearReturnInfo(d);
         await docs.UpdateAsync(d);
 
         if (isDirectPdv)
@@ -44,6 +58,29 @@ public class DebtWorkflowService(
                 : n.Trim();
             await ChangeDeptAsync(id, u, "PQLN", DocumentStatus.PqlnPendingReceive, CirculationAction.PkhSupApproved, note);
         }
+    }
+
+    public async Task ResubmitPkhAsync(Guid id, string? n, Guid u)
+    {
+        var (user, dept) = await GetActorAsync(users, departments, u);
+        if (dept?.Code != "PKH" || user.Role != "staff")
+            throw new UnauthorizedAccessException("Chỉ nhân viên PKH mới có quyền gửi lại hồ sơ này.");
+
+        var d = await docs.GetByIdAsync(id) ?? throw new InvalidOperationException("Hồ sơ không tồn tại.");
+        if (d.CreatedByUserId != u)
+            throw new UnauthorizedAccessException("Chỉ cán bộ khởi tạo hồ sơ mới được phép gửi lại.");
+        if (d.Status != DocumentStatus.ReturnedToPkh)
+            throw new InvalidOperationException("Hồ sơ không ở trạng thái bị trả về PKH.");
+
+        d.Status = DocumentStatus.PkhPendingSup;
+        ClearReturnInfo(d);
+        await docs.UpdateAsync(d);
+
+        var note = string.IsNullOrWhiteSpace(n)
+            ? "NV PKH đã chỉnh sửa và gửi lại SUP PKH phê duyệt"
+            : $"NV PKH đã chỉnh sửa và gửi lại SUP PKH: {n.Trim()}";
+
+        await audit.AddHistoryAsync(id, dept.Id, dept.Id, CirculationAction.Supplemented, d.Status, u, note);
     }
 
     public async Task PqlnTakeOwnershipAsync(Guid id, Guid u)
@@ -84,11 +121,25 @@ public class DebtWorkflowService(
 
     public async Task PqlnSubmitSupAsync(Guid id, string? n, Guid u)
     {
+        var (user, dept) = await GetActorAsync(users, departments, u);
+        if (dept?.Code != "PQLN" || user.Role != "staff")
+            throw new UnauthorizedAccessException("Chỉ nhân viên phòng PQLN mới có quyền trình SUP PQLN.");
+
         var d = await docs.GetByIdAsync(id) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
         if (NormalizeWorkflowType(d.WorkflowType) == WorkflowDirectPdv)
             throw new InvalidOperationException("Hồ sơ luồng chuyển thẳng PDV không đi qua PQLN.");
 
-        await ChangeDeptAsync(id, u, "PQLN", DocumentStatus.PqlnPendingSup, CirculationAction.PqlnSubmittedSup, n ?? "Cán bộ PQLN đã kiểm tra và đẩy hồ sơ lên SUP PQLN duyệt");
+        if (d.Status is not (DocumentStatus.PqlnReceived or DocumentStatus.ReturnedToPqln))
+            throw new InvalidOperationException("Hồ sơ không ở trạng thái được phép trình SUP PQLN.");
+        if (d.PqlnReceiverId != u)
+            throw new UnauthorizedAccessException("Chỉ cán bộ PQLN đang thụ lý mới có quyền trình SUP PQLN.");
+
+        var defaultMsg = d.Status == DocumentStatus.ReturnedToPqln
+            ? "NV PQLN đã xử lý hồ sơ bị trả lại và trình lại SUP PQLN duyệt"
+            : "Cán bộ PQLN đã kiểm tra và đẩy hồ sơ lên SUP PQLN duyệt";
+
+        var note = string.IsNullOrWhiteSpace(n) ? defaultMsg : n.Trim();
+        await ChangeDeptAsync(id, u, "PQLN", DocumentStatus.PqlnPendingSup, CirculationAction.PqlnSubmittedSup, note);
     }
 
     public async Task PqlnSupApproveAsync(Guid id, string? n, Guid u)
@@ -96,12 +147,15 @@ public class DebtWorkflowService(
         var d = await docs.GetByIdAsync(id) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
         if (NormalizeWorkflowType(d.WorkflowType) == WorkflowDirectPdv)
             throw new InvalidOperationException("Hồ sơ luồng chuyển thẳng PDV không đi qua PQLN.");
+        if (d.Status != DocumentStatus.PqlnPendingSup)
+            throw new InvalidOperationException("Hồ sơ không ở trạng thái chờ SUP PQLN duyệt.");
 
         d.SupPqlnApprovedAt = DateTime.UtcNow;
         d.SupPqlnApproverId = u;
+        ClearReturnInfo(d);
         await docs.UpdateAsync(d);
 
-        await ChangeDeptAsync(id, u, "PDV", DocumentStatus.PdvPendingReceive, CirculationAction.PqlnSupApproved, n ?? "SUP PQLN đã duyệt và chuyển hồ sơ sang PDV");
+        await ChangeDeptAsync(id, u, "PDV", DocumentStatus.PdvPendingReceive, CirculationAction.PqlnSupApproved, string.IsNullOrWhiteSpace(n) ? "SUP PQLN đã duyệt và chuyển hồ sơ sang PDV" : n.Trim());
     }
 
     public async Task PdvTakeOwnershipAsync(Guid id, Guid u)
@@ -155,6 +209,7 @@ public class DebtWorkflowService(
         d.EntryPostedAt = DateTime.UtcNow;
         d.EntryPostedById = u;
         d.Status = DocumentStatus.PdvEntryPosted;
+        ClearReturnInfo(d);
         await docs.UpdateAsync(d);
 
         var note = string.IsNullOrWhiteSpace(n)
@@ -185,6 +240,8 @@ public class DebtWorkflowService(
         var allSupplemented = unsupItems.Count == 0;
         var isDefaultUiNote = string.IsNullOrWhiteSpace(n)
             || n.Trim().Equals("SUP PDV kiểm tra và duyệt hoàn tất", StringComparison.OrdinalIgnoreCase);
+
+        ClearReturnInfo(d);
 
         if (d.Status == DocumentStatus.PdvEntryPosted)
         {
@@ -240,17 +297,104 @@ public class DebtWorkflowService(
 
     public async Task ReturnAsync(Guid id, Guid to, string? n, Guid u)
     {
-        var d = await docs.GetByIdAsync(id) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
-        var from = d.CurrentDepartmentId;
-        d.CurrentDepartmentId = to;
-        var target = await departments.GetByIdAsync(to);
-        d.Status = target?.Code switch
+        var targetDept = await departments.GetByIdAsync(to)
+            ?? throw new InvalidOperationException("Phòng ban đích không tồn tại.");
+        await ReturnByCodeAsync(id, targetDept.Code, n, u);
+    }
+
+    public async Task ReturnByCodeAsync(Guid id, string toDepartmentCode, string? n, Guid u)
+    {
+        if (string.IsNullOrWhiteSpace(n))
+            throw new InvalidOperationException("Vui lòng nhập lý do trả lại hồ sơ.");
+
+        var reason = n.Trim();
+        var (user, actorDept) = await GetActorAsync(users, departments, u);
+        if (actorDept == null)
+            throw new UnauthorizedAccessException("Tài khoản chưa được gán phòng ban.");
+
+        var d = await docs.GetByIdAsync(id)
+            ?? throw new InvalidOperationException("Hồ sơ không tồn tại.");
+
+        var targetCode = toDepartmentCode.Trim().ToUpperInvariant();
+        var targetDept = await departments.GetByCodeAsync(targetCode)
+            ?? throw new InvalidOperationException($"Không tìm thấy phòng ban đích {targetCode}.");
+
+        var isDirectPdv = NormalizeWorkflowType(d.WorkflowType) == WorkflowDirectPdv;
+        if (isDirectPdv && targetCode == "PQLN")
+            throw new InvalidOperationException("Hồ sơ luồng chuyển thẳng PDV không thể trả về PQLN.");
+
+        var isAllowed = (actorDept.Code, user.Role, d.Status, targetCode) switch
         {
-            "PKH" => DocumentStatus.PkhPendingSup,
-            "PQLN" => DocumentStatus.PqlnReceived,
-            _ => DocumentStatus.PdvReceived
+            // SUP PKH trả lại cho NV PKH
+            ("PKH", "manager", DocumentStatus.PkhPendingSup, "PKH") => true,
+
+            // NV PQLN trả về PKH (kể cả khi đang ở PqlnPendingReceive, PqlnReceived, hoặc ReturnedToPqln)
+            ("PQLN", "staff", DocumentStatus.PqlnPendingReceive, "PKH") when !isDirectPdv => true,
+            ("PQLN", "staff", DocumentStatus.PqlnReceived or DocumentStatus.ReturnedToPqln, "PKH")
+                when !isDirectPdv && d.PqlnReceiverId == u => true,
+
+            // SUP PQLN trả về NV PQLN hoặc về PKH
+            ("PQLN", "manager", DocumentStatus.PqlnPendingSup, "PQLN" or "PKH") when !isDirectPdv => true,
+
+            // NV PDV trả về PQLN (luồng chuẩn) hoặc về PKH
+            ("PDV", "staff", DocumentStatus.PdvPendingReceive, "PKH") => true,
+            ("PDV", "staff", DocumentStatus.PdvPendingReceive, "PQLN") when !isDirectPdv => true,
+            ("PDV", "staff", DocumentStatus.PdvReceived, "PKH") when d.PdvReceiverId == u => true,
+            ("PDV", "staff", DocumentStatus.PdvReceived, "PQLN") when !isDirectPdv && d.PdvReceiverId == u => true,
+
+            // SUP PDV tại PdvEntryPosted trả về PQLN (luồng chuẩn) hoặc trả thẳng về PKH
+            ("PDV", "manager", DocumentStatus.PdvEntryPosted, "PKH") => true,
+            ("PDV", "manager", DocumentStatus.PdvEntryPosted, "PQLN") when !isDirectPdv => true,
+
+            _ => false
         };
+
+        if (!isAllowed)
+            throw new UnauthorizedAccessException("Bạn không có quyền trả lại hồ sơ tới phòng ban này ở trạng thái hiện tại.");
+
+        var fromDeptId = d.CurrentDepartmentId;
+        d.CurrentDepartmentId = targetDept.Id;
+
+        if (targetCode == "PKH")
+        {
+            d.Status = DocumentStatus.ReturnedToPkh;
+            // Reset thông tin tiếp nhận/duyệt của các bước sau để vòng xử lý lại hoạt động bình thường
+            d.SupPkhApprovedAt = null;
+            d.SupPkhApproverId = null;
+            d.PqlnReceiverId = null;
+            d.PqlnReceivedAt = null;
+            d.SupPqlnApprovedAt = null;
+            d.SupPqlnApproverId = null;
+            d.PdvReceiverId = null;
+            d.PdvReceivedAt = null;
+            d.EntryPostedAt = null;
+            d.EntryPostedById = null;
+            d.SupPdvApprovedEntryAt = null;
+            d.SupPdvEntryApproverId = null;
+        }
+        else if (targetCode == "PQLN")
+        {
+            d.Status = DocumentStatus.ReturnedToPqln;
+            d.SupPqlnApprovedAt = null;
+            d.SupPqlnApproverId = null;
+            d.PdvReceiverId = null;
+            d.PdvReceivedAt = null;
+            d.EntryPostedAt = null;
+            d.EntryPostedById = null;
+            d.SupPdvApprovedEntryAt = null;
+            d.SupPdvEntryApproverId = null;
+        }
+
+        d.ReturnReason = reason;
+        d.ReturnedAt = DateTime.UtcNow;
+        d.ReturnedByUserId = u;
+        d.ReturnedByUserName = user.Name;
+        d.ReturnedFromDepartmentCode = actorDept.Code;
+
         await docs.UpdateAsync(d);
-        await audit.AddHistoryAsync(id, from, to, CirculationAction.Returned, d.Status, u, n ?? "Trả lại hồ sơ để chỉnh sửa/bổ sung");
+
+        var actorLabel = user.Role == "manager" ? $"SUP {actorDept.Code}" : $"NV {actorDept.Code}";
+        var historyNote = $"[{actorLabel} → {targetCode}] Trả lại hồ sơ: {reason}";
+        await audit.AddHistoryAsync(id, fromDeptId, targetDept.Id, CirculationAction.Returned, d.Status, u, historyNote);
     }
 }

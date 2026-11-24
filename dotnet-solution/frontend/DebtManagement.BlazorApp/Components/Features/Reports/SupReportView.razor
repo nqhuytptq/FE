@@ -1,0 +1,1447 @@
+@using DebtManagement.Shared.DTOs
+@using DebtManagement.Application.Interfaces
+@using static DebtManagement.Shared.Constants.WorkflowConstants
+@using static DebtManagement.BlazorApp.Models.DebtUiHelpers
+@inject BlazorSession Session
+@inject ISupReportService ReportService
+@inject IJSRuntime JS
+
+<div class="mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+        <h4 class="fw-bold mb-1" style="letter-spacing: -0.3px;">
+            Báo cáo giám sát chứng từ nợ — @(ActiveReportDept switch
+            {
+                DeptPkh => "Phòng Khách hàng (PKH)",
+                DeptPqln => "Phòng Quản lý nợ (PQLN)",
+                DeptPdv => "Phòng Dịch vụ khách hàng (PDV)",
+                _ => "Phòng ban"
+            })
+        </h4>
+        <p class="text-muted small mb-0">
+            Theo dõi phân loại chứng từ nợ, tiến độ trả nợ liên phòng ban và trách nhiệm cán bộ xử lý.
+        </p>
+    </div>
+
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        @if (Session.CurrentUser?.Role == RoleAdmin)
+        {
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button"
+                        class="btn @(adminPreviewDept == DeptPkh ? "btn-success" : "btn-outline-success")"
+                        @onclick="() => SwitchAdminDeptAsync(DeptPkh)">
+                    Góc nhìn PKH
+                </button>
+                <button type="button"
+                        class="btn @(adminPreviewDept == DeptPqln ? "btn-success" : "btn-outline-success")"
+                        @onclick="() => SwitchAdminDeptAsync(DeptPqln)">
+                    Góc nhìn PQLN
+                </button>
+                <button type="button"
+                        class="btn @(adminPreviewDept == DeptPdv ? "btn-success" : "btn-outline-success")"
+                        @onclick="() => SwitchAdminDeptAsync(DeptPdv)">
+                    Góc nhìn PDV
+                </button>
+            </div>
+        }
+
+        <button type="button"
+                class="btn btn-sm bg-white border rounded-3 px-3 fw-medium"
+                style="height: 36px;"
+                @onclick="LoadReportAsync">
+            ↻ Làm mới
+        </button>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="vcb-surface p-5 text-center">
+        <span class="spinner-border text-success"></span>
+        <div class="text-muted small mt-2">Đang tổng hợp dữ liệu báo cáo...</div>
+    </div>
+}
+else if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger py-2 small rounded-3">@errorMessage</div>
+}
+else if (ActiveReportDept == DeptPkh && pkhReport != null)
+{
+    @RenderOriginatedReport(pkhReport, pkhOnTimePager, pkhOverduePager, isPqlnOriginated: false)
+}
+else if (ActiveReportDept == DeptPqln && pqlnReport != null)
+{
+    <div class="vcb-surface p-2 px-3 mb-3">
+        <div class="vcb-tabs">
+            <button type="button"
+                    class="vcb-tab-btn @(pqlnTab == "received" ? "active" : "")"
+                    @onclick='() => { pqlnTab = "received"; ResetFilters(); }'>
+                <span>1. Tiếp nhận từ PKH</span>
+                <span class="badge rounded-pill bg-secondary-subtle text-dark" style="font-size: 11px;">
+                    @pqlnReport.ReceivedFromPkh.TotalDocuments VB
+                </span>
+                @if (pqlnReport.ReceivedFromPkh.UnpaidItemsCount > 0)
+                {
+                    <span class="badge rounded-pill bg-danger" style="font-size: 11px;">
+                        @pqlnReport.ReceivedFromPkh.UnpaidItemsCount CT chưa trả
+                    </span>
+                }
+            </button>
+
+            <button type="button"
+                    class="vcb-tab-btn @(pqlnTab == "originated" ? "active" : "")"
+                    @onclick='() => { pqlnTab = "originated"; ResetFilters(); }'>
+                <span>2. Khởi tạo (Chuyển sang PDV)</span>
+                <span class="badge rounded-pill bg-secondary-subtle text-dark" style="font-size: 11px;">
+                    @pqlnReport.OriginatedToPdv.TotalItems CT
+                </span>
+                @if (pqlnReport.OriginatedToPdv.OverdueUnpaidCount > 0)
+                {
+                    <span class="badge rounded-pill bg-danger" style="font-size: 11px;">
+                        @pqlnReport.OriginatedToPdv.OverdueUnpaidCount quá hạn chưa trả
+                    </span>
+                }
+            </button>
+        </div>
+    </div>
+
+    @if (pqlnTab == "received")
+    {
+        @RenderPqlnReceivedReport(pqlnReport.ReceivedFromPkh)
+    }
+    else
+    {
+        @RenderOriginatedReport(pqlnReport.OriginatedToPdv, pqlnOnTimePager, pqlnOverduePager, isPqlnOriginated: true)
+    }
+}
+else if (ActiveReportDept == DeptPdv && pdvReport != null)
+{
+    <div class="vcb-surface p-2 px-3 mb-3">
+        <div class="vcb-tabs">
+            <button type="button"
+                    class="vcb-tab-btn @(pdvTab == "summary" ? "active" : "")"
+                    @onclick='() => { pdvTab = "summary"; ResetFilters(); }'>
+                <span>1. Tổng hợp các văn bản</span>
+                <span class="badge rounded-pill bg-secondary-subtle text-dark" style="font-size: 11px;">
+                    @pdvReport.TotalDocuments VB
+                </span>
+                @if (pdvReport.DocumentsWithUnpaidDebt > 0)
+                {
+                    <span class="badge rounded-pill bg-warning text-dark" style="font-size: 11px;">
+                        @pdvReport.DocumentsWithUnpaidDebt VB còn nợ CT
+                    </span>
+                }
+            </button>
+
+            <button type="button"
+                    class="vcb-tab-btn @(pdvTab == "pkh_debt" ? "active" : "")"
+                    @onclick='() => { pdvTab = "pkh_debt"; ResetFilters(); }'>
+                <span>2. Nợ của PKH</span>
+                <span class="badge rounded-pill bg-secondary-subtle text-dark" style="font-size: 11px;">
+                    @pdvReport.PkhTotalItems CT
+                </span>
+                @if (pdvReport.PkhUnpaidItems > 0)
+                {
+                    <span class="badge rounded-pill bg-danger" style="font-size: 11px;">
+                        @pdvReport.PkhUnpaidItems chưa trả
+                    </span>
+                }
+            </button>
+
+            <button type="button"
+                    class="vcb-tab-btn @(pdvTab == "pqln_debt" ? "active" : "")"
+                    @onclick='() => { pdvTab = "pqln_debt"; ResetFilters(); }'>
+                <span>3. Nợ của PQLN</span>
+                <span class="badge rounded-pill bg-secondary-subtle text-dark" style="font-size: 11px;">
+                    @pdvReport.PqlnTotalItems CT
+                </span>
+                @if (pdvReport.PqlnUnpaidItems > 0)
+                {
+                    <span class="badge rounded-pill bg-danger" style="font-size: 11px;">
+                        @pdvReport.PqlnUnpaidItems chưa trả
+                    </span>
+                }
+            </button>
+        </div>
+    </div>
+
+    @if (pdvTab == "summary")
+    {
+        @RenderPdvDocumentSummary(pdvReport)
+    }
+    else if (pdvTab == "pkh_debt")
+    {
+        @RenderPdvDeptDebtList(pdvReport.PkhDebtItems, pdvPkhDebtPager, "PKH", isPkhSource: true)
+    }
+    else
+    {
+        @RenderPdvDeptDebtList(pdvReport.PqlnDebtItems, pdvPqlnDebtPager, "PQLN", isPkhSource: false)
+    }
+}
+else
+{
+    <div class="vcb-surface p-5 text-center text-muted">
+        Phân hệ báo cáo SUP chỉ áp dụng cho Lãnh đạo phòng (PKH, PQLN, PDV).
+    </div>
+}
+
+@code {
+    [Parameter] public EventCallback<Guid> OnSelectDocument { get; set; }
+
+    sealed class TablePager
+    {
+        public int Page { get; set; } = 1;
+        public int PageSize { get; set; } = 10;
+
+        public List<T> Apply<T>(
+            IReadOnlyList<T> source,
+            out int totalItems,
+            out int totalPages,
+            out int startIndex,
+            out int endIndex)
+        {
+            totalItems = source.Count;
+            totalPages = Math.Max(1, (int)Math.Ceiling(totalItems / (double)PageSize));
+            if (Page > totalPages) Page = totalPages;
+            if (Page < 1) Page = 1;
+
+            if (totalItems == 0)
+            {
+                startIndex = 0;
+                endIndex = 0;
+                return new List<T>();
+            }
+
+            startIndex = (Page - 1) * PageSize + 1;
+            endIndex = Math.Min(totalItems, Page * PageSize);
+            return source.Skip((Page - 1) * PageSize).Take(PageSize).ToList();
+        }
+    }
+
+sealed class GroupedDebtDocument
+    {
+        public Guid DocumentId { get; init; }
+        public string DocumentNumber { get; init; } = "";
+        public string WorkflowType { get; init; } = "";
+        public string CustomerName { get; init; } = "";
+        public string? CustomerCif { get; init; }
+        public string DocumentStatus { get; init; } = "";
+        public string CreatedByName { get; init; } = "";
+        public string OwedToDepartment { get; init; } = "";
+        public string OwedToHandlerName { get; init; } = "";
+        public string DueDate { get; init; } = "";
+        public bool IsOverdue { get; init; }
+        public int MaxOverdueDays { get; init; }
+        public List<SupDebtItemReportRow> Items { get; init; } = new();
+        public int PaidCount => Items.Count(x => x.IsPaid);
+        public int UnpaidCount => Items.Count - PaidCount;
+    }
+
+    bool isLoading = true;
+    bool groupByDocument = true; // Mặc định gom các chứng từ theo từng Hồ sơ / Văn bản
+    string? errorMessage;
+    string adminPreviewDept = DeptPkh;
+    string pqlnTab = "received";
+    string pdvTab = "summary";
+
+    // Bộ lọc chung & riêng từng tab
+    string searchText = "";
+    string creatorFilter = "";
+    string overdueSubFilter = "all";       // all | unpaid | paid
+    string receivedStatusFilter = "all";   // all | unpaid | paid
+    string pdvDocDebtFilter = "all";       // all | any_unpaid | pkh_unpaid | pqln_unpaid | fully_paid
+    string pdvWorkflowFilter = "";         // "" | pkh_pqln_pdv | pkh_pdv
+    string pdvDebtStatusFilter = "all";    // all | unpaid | paid | overdue_unpaid
+
+    // 8 bộ phân trang độc lập cho toàn bộ các mục báo cáo của 3 phòng
+    readonly TablePager pkhOnTimePager = new();
+    readonly TablePager pkhOverduePager = new();
+    readonly TablePager pqlnReceivedPager = new();
+    readonly TablePager pqlnOnTimePager = new();
+    readonly TablePager pqlnOverduePager = new();
+    readonly TablePager pdvSummaryPager = new();
+    readonly TablePager pdvPkhDebtPager = new();
+    readonly TablePager pdvPqlnDebtPager = new();
+
+    SupOriginatedDebtReportDto? pkhReport;
+    SupPqlnFullReportDto? pqlnReport;
+    SupPdvFullReportDto? pdvReport;
+
+    string ActiveReportDept => Session.CurrentUser?.Role == RoleAdmin
+        ? adminPreviewDept
+        : (Session.CurrentUser?.DepartmentCode ?? "");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReportAsync();
+    }
+
+    void ResetAllPages()
+    {
+        pkhOnTimePager.Page = 1;
+        pkhOverduePager.Page = 1;
+        pqlnReceivedPager.Page = 1;
+        pqlnOnTimePager.Page = 1;
+        pqlnOverduePager.Page = 1;
+        pdvSummaryPager.Page = 1;
+        pdvPkhDebtPager.Page = 1;
+        pdvPqlnDebtPager.Page = 1;
+    }
+
+    void ResetFilters()
+    {
+        searchText = "";
+        creatorFilter = "";
+        overdueSubFilter = "all";
+        receivedStatusFilter = "all";
+        pdvDocDebtFilter = "all";
+        pdvWorkflowFilter = "";
+        pdvDebtStatusFilter = "all";
+        ResetAllPages();
+    }
+
+    async Task SwitchAdminDeptAsync(string dept)
+    {
+        adminPreviewDept = dept;
+        ResetFilters();
+        await LoadReportAsync();
+    }
+
+    async Task LoadReportAsync()
+    {
+        if (Session.CurrentUser == null) return;
+        isLoading = true;
+        errorMessage = null;
+        try
+        {
+            if (ActiveReportDept == DeptPkh)
+            {
+                pkhReport = await ReportService.GetPkhSupReportAsync(Session.CurrentUser.Id);
+            }
+            else if (ActiveReportDept == DeptPqln)
+            {
+                pqlnReport = await ReportService.GetPqlnSupReportAsync(Session.CurrentUser.Id);
+            }
+            else if (ActiveReportDept == DeptPdv)
+            {
+                pdvReport = await ReportService.GetPdvSupReportAsync(Session.CurrentUser.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    bool MatchRow(SupDebtItemReportRow r)
+    {
+        if (!string.IsNullOrEmpty(creatorFilter) && r.CreatedByName != creatorFilter)
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            var q = searchText.Trim().ToLower();
+            var hit = r.DocumentNumber.ToLower().Contains(q)
+                   || r.CustomerName.ToLower().Contains(q)
+                   || (r.CustomerCif?.ToLower().Contains(q) ?? false)
+                   || r.ItemName.ToLower().Contains(q)
+                   || r.CreatedByName.ToLower().Contains(q)
+                   || r.OwedToHandlerName.ToLower().Contains(q);
+            if (!hit) return false;
+        }
+        return true;
+    }
+
+    static List<GroupedDebtDocument> GroupRowsByDocument(List<SupDebtItemReportRow> rows)
+    {
+        return rows
+            .GroupBy(r => r.DocumentId)
+            .Select(g =>
+            {
+                var first = g.First();
+                var itemList = g.ToList();
+                return new GroupedDebtDocument
+                {
+                    DocumentId = g.Key,
+                    DocumentNumber = first.DocumentNumber,
+                    WorkflowType = first.WorkflowType,
+                    CustomerName = first.CustomerName,
+                    CustomerCif = first.CustomerCif,
+                    DocumentStatus = first.DocumentStatus,
+                    CreatedByName = first.CreatedByName,
+                    OwedToDepartment = first.OwedToDepartment,
+                    OwedToHandlerName = first.OwedToHandlerName,
+                    DueDate = first.DueDate ?? "",
+                    IsOverdue = itemList.Any(x => x.IsOverdue),
+                    MaxOverdueDays = itemList.Max(x => x.OverdueDays),
+                    Items = itemList
+                };
+            })
+            .ToList();
+    }
+
+    RenderFragment RenderGroupingToggle() => __builder =>
+    {
+        <div class="btn-group btn-group-sm" role="group" title="Chế độ hiển thị bảng dữ liệu">
+            <button type="button"
+                    class="btn @(groupByDocument ? "btn-success" : "btn-outline-secondary")"
+                    style="height: 36px;"
+                    @onclick="() => { groupByDocument = true; ResetAllPages(); }">
+                🗂 Gom theo Hồ sơ
+            </button>
+            <button type="button"
+                    class="btn @(!groupByDocument ? "btn-success" : "btn-outline-secondary")"
+                    style="height: 36px;"
+                    @onclick="() => { groupByDocument = false; ResetAllPages(); }">
+                ☰ Tách từng chứng từ
+            </button>
+        </div>
+    };
+
+    RenderFragment RenderPaginationBar(
+        TablePager pager,
+        int totalItems,
+        int totalPages,
+        int startIndex,
+        int endIndex,
+        string unitLabel = "mục") => __builder =>
+    {
+        if (totalItems == 0) return;
+
+        <div class="p-3 px-4 border-top d-flex flex-wrap justify-content-between align-items-center gap-2 bg-white">
+            <div class="d-flex align-items-center gap-2 text-muted" style="font-size: 12.5px;">
+                <span>
+                    Hiển thị <b>@startIndex–@endIndex</b> / <b>@totalItems</b> @unitLabel
+                </span>
+                <select class="form-select form-select-sm rounded-3"
+                        style="width: auto; height: 32px; font-size: 12.5px;"
+                        value="@pager.PageSize"
+                        @onchange="e => { if (int.TryParse(e.Value?.ToString(), out var sz)) { pager.PageSize = sz; pager.Page = 1; } }">
+                    @foreach (var opt in PageSizeOptions)
+                    {
+                        <option value="@opt">@opt / trang</option>
+                    }
+                </select>
+            </div>
+
+            <nav aria-label="Phân trang báo cáo">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item @(pager.Page <= 1 ? "disabled" : "")">
+                        <button type="button"
+                                class="page-link"
+                                style="color: #1f2937;"
+                                disabled="@(pager.Page <= 1)"
+                                @onclick="() => { if (pager.Page > 1) pager.Page--; }">
+                            ‹ Trước
+                        </button>
+                    </li>
+
+                    @foreach (var p in GetVisiblePages(pager.Page, totalPages))
+                    {
+                        if (p == null)
+                        {
+                            <li class="page-item disabled">
+                                <span class="page-link">…</span>
+                            </li>
+                        }
+                        else
+                        {
+                            var pageNum = p.Value;
+                            var isActive = pageNum == pager.Page;
+                            <li class="page-item @(isActive ? "active" : "")">
+                                <button type="button"
+                                        class="page-link"
+                                        style="@(isActive ? "background-color: #0a7a42; border-color: #0a7a42; color: #fff; font-weight: 600;" : "color: #1f2937;")"
+                                        @onclick="() => pager.Page = pageNum">
+                                    @pageNum
+                                </button>
+                            </li>
+                        }
+                    }
+
+                    <li class="page-item @(pager.Page >= totalPages ? "disabled" : "")">
+                        <button type="button"
+                                class="page-link"
+                                style="color: #1f2937;"
+                                disabled="@(pager.Page >= totalPages)"
+                                @onclick="() => { if (pager.Page < totalPages) pager.Page++; }">
+                            Sau ›
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    };
+
+    RenderFragment RenderOriginatedReport(
+        SupOriginatedDebtReportDto report,
+        TablePager onTimePager,
+        TablePager overduePager,
+        bool isPqlnOriginated) => __builder =>
+    {
+        var allCreators = report.OnTimeItems
+            .Concat(report.OverdueUnpaidItems)
+            .Concat(report.OverduePaidItems)
+            .Select(x => x.CreatedByName)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct()
+            .OrderBy(x => x)
+            .ToList();
+
+        var filteredOnTime = report.OnTimeItems.Where(MatchRow).ToList();
+        var filteredOverdueUnpaid = report.OverdueUnpaidItems.Where(MatchRow).ToList();
+        var filteredOverduePaid = report.OverduePaidItems.Where(MatchRow).ToList();
+
+        var filteredOverdueCombined = overdueSubFilter switch
+        {
+            "unpaid" => filteredOverdueUnpaid,
+            "paid" => filteredOverduePaid,
+            _ => filteredOverdueUnpaid.Concat(filteredOverduePaid).ToList()
+        };
+
+        <div class="vcb-kpi-grid-compact mb-3">
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num">@report.TotalItems</div>
+                    <div class="kpi-lbl">Tổng chứng từ nợ</div>
+                </div>
+                <div class="kpi-ico" style="background: #eaf5ee; color: #0a7a42;">📄</div>
+            </div>
+
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num text-success">@filteredOnTime.Count</div>
+                    <div class="kpi-lbl">Nhóm 1: Đúng hạn</div>
+                </div>
+                <div class="kpi-ico" style="background: #e6f7ed; color: #0e8a4a;">✓</div>
+            </div>
+
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num text-danger">@filteredOverdueUnpaid.Count</div>
+                    <div class="kpi-lbl">Quá hạn — Chưa trả</div>
+                </div>
+                <div class="kpi-ico" style="background: #fee2e2; color: #dc2626;">!</div>
+            </div>
+
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num text-warning">@filteredOverduePaid.Count</div>
+                    <div class="kpi-lbl">Quá hạn — Đã trả</div>
+                </div>
+                <div class="kpi-ico" style="background: #fef3c7; color: #b45309;">⏱</div>
+            </div>
+        </div>
+
+        <div class="vcb-surface p-3 px-4 mb-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <div class="vcb-input-wrap" style="width: 260px;">
+                        <span class="vcb-input-icon" style="font-size: 13px;">🔍</span>
+                        <input class="vcb-input" style="height: 36px; font-size: 13px;"
+                               value="@searchText"
+                               @oninput="e => { searchText = e.Value?.ToString() ?? string.Empty; onTimePager.Page = 1; overduePager.Page = 1; }"
+                               placeholder="Tìm số VB, CIF, tên chứng từ..." />
+                    </div>
+
+                    <select class="form-select form-select-sm rounded-3" style="width: 210px; height: 36px;"
+                            value="@creatorFilter"
+                            @onchange="e => { creatorFilter = e.Value?.ToString() ?? string.Empty; onTimePager.Page = 1; overduePager.Page = 1; }">
+                        <option value="">Tất cả cán bộ tạo (@allCreators.Count)</option>
+                        @foreach (var c in allCreators)
+                        {
+                            <option value="@c">@c</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    @RenderGroupingToggle()
+
+                    <button type="button"
+                            class="btn btn-sm bg-white border rounded-3 px-3 fw-medium"
+                            style="height: 36px;"
+                            @onclick="() => ExportOriginatedCsv(report, isPqlnOriginated)">
+                        ⬇ Xuất CSV báo cáo
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="vcb-surface mb-4">
+            <div class="p-3 px-4 border-bottom d-flex justify-content-between align-items-center" style="background: #f4fbf7;">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-success rounded-pill">Nhóm 1</span>
+                    <span class="fw-bold text-dark" style="font-size: 14.5px;">Chứng từ nợ Đúng hạn</span>
+                    <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle">
+                        @filteredOnTime.Count CT · @filteredOnTime.Select(x => x.DocumentId).Distinct().Count() VB
+                    </span>
+                </div>
+                <span class="small text-muted">
+                    Đã trả: <b>@filteredOnTime.Count(x => x.IsPaid)</b> · Chưa trả: <b>@filteredOnTime.Count(x => !x.IsPaid)</b>
+                </span>
+            </div>
+
+            @RenderDebtItemReportTable(filteredOnTime, onTimePager, showOverdueColumn: false)
+        </div>
+
+        <div class="vcb-surface">
+            <div class="p-3 px-4 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2" style="background: #fff8f8;">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-danger rounded-pill">Nhóm 2</span>
+                    <span class="fw-bold text-dark" style="font-size: 14.5px;">Chứng từ nợ Quá hạn</span>
+                    <span class="badge rounded-pill bg-danger-subtle text-danger border border-danger-subtle">
+                        @(filteredOverdueUnpaid.Count + filteredOverduePaid.Count) CT · @filteredOverdueCombined.Select(x => x.DocumentId).Distinct().Count() VB
+                    </span>
+                </div>
+
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button"
+                            class="btn @(overdueSubFilter == "all" ? "btn-dark" : "btn-outline-secondary")"
+                            @onclick='() => { overdueSubFilter = "all"; overduePager.Page = 1; }'>
+                        Tất cả quá hạn (@(filteredOverdueUnpaid.Count + filteredOverduePaid.Count))
+                    </button>
+                    <button type="button"
+                            class="btn @(overdueSubFilter == "unpaid" ? "btn-danger" : "btn-outline-danger")"
+                            @onclick='() => { overdueSubFilter = "unpaid"; overduePager.Page = 1; }'>
+                        Chưa trả (@filteredOverdueUnpaid.Count)
+                    </button>
+                    <button type="button"
+                            class="btn @(overdueSubFilter == "paid" ? "btn-warning text-dark fw-semibold" : "btn-outline-warning text-dark")"
+                            @onclick='() => { overdueSubFilter = "paid"; overduePager.Page = 1; }'>
+                        Đã trả (@filteredOverduePaid.Count)
+                    </button>
+                </div>
+            </div>
+
+            @RenderDebtItemReportTable(filteredOverdueCombined, overduePager, showOverdueColumn: true)
+        </div>
+    };
+
+    RenderFragment RenderDebtItemReportTable(
+        List<SupDebtItemReportRow> rows,
+        TablePager pager,
+        bool showOverdueColumn) => __builder =>
+    {
+        if (rows.Count == 0)
+        {
+            <div class="p-4 text-center text-muted small">Không có chứng từ nợ nào trong mục này.</div>
+            return;
+        }
+
+        if (groupByDocument)
+        {
+            var groupedDocs = GroupRowsByDocument(rows);
+            var pagedDocs = pager.Apply(groupedDocs, out var totalDocs, out var totalPages, out var startIndex, out var endIndex);
+
+            <div class="table-responsive">
+                <table class="table vcb-table mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th>HỒ SƠ / KHÁCH HÀNG</th>
+                            <th>DANH SÁCH CHỨNG TỪ NỢ</th>
+                            <th>CỦA AI TẠO</th>
+                            <th>NỢ AI (ĐƠN VỊ NHẬN)</th>
+                            <th>HẠN THANH TOÁN</th>
+                            <th>TIẾN ĐỘ TRẢ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var g in pagedDocs)
+                        {
+                            <tr style="cursor: pointer;" @onclick="() => OnSelectDocument.InvokeAsync(g.DocumentId)">
+                                <td>
+                                    <div class="d-flex flex-wrap align-items-center gap-1">
+                                        <span class="fw-semibold text-muted" style="font-family: monospace; font-size: 12px;">
+                                            @g.DocumentNumber
+                                        </span>
+                                        @if (g.WorkflowType == WorkflowDirectPdv)
+                                        {
+                                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" style="font-size: 10px;">
+                                                Chuyển thẳng PDV
+                                            </span>
+                                        }
+                                    </div>
+                                    <div class="fw-bold mt-1" style="font-size: 13.5px;">
+                                        @g.CustomerName
+                                        @if (!string.IsNullOrWhiteSpace(g.CustomerCif))
+                                        {
+                                            <span class="fw-normal text-muted" style="font-size: 12px;"> · CIF: @g.CustomerCif</span>
+                                        }
+                                    </div>
+                                    <div class="text-muted mt-1" style="font-size: 11.5px;">
+                                        HS: @StatusLabel(g.DocumentStatus)
+                                    </div>
+                                </td>
+
+                                <td style="min-width: 280px;">
+                                    <div class="d-flex flex-column gap-1">
+                                        @foreach (var it in g.Items)
+                                        {
+                                            var bgColor = it.IsPaid ? "#f0fdf4" : (it.IsSupplemented ? "#eff6ff" : "#fef2f2");
+                                            <div class="d-flex align-items-center justify-content-between gap-2 small py-1 px-2 rounded-2"
+                                                 style="background: @bgColor;">
+                                                <span class="fw-medium text-dark">📄 @it.ItemName</span>
+                                                @if (it.IsPaid)
+                                                {
+                                                    <span class="badge bg-success-subtle text-success">Đã trả</span>
+                                                }
+                                                else if (it.IsSupplemented)
+                                                {
+                                                    <span class="badge bg-primary-subtle text-primary">Chờ @it.OwedToDepartment XN</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-danger-subtle text-danger">Chưa bổ sung</span>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                </td>
+
+                                <td>
+                                    <span class="fw-semibold text-dark" style="font-size: 13px;">@g.CreatedByName</span>
+                                </td>
+
+                                <td>
+                                    <span class="vcb-dept-pill me-1">@g.OwedToDepartment</span>
+                                    <span class="small text-dark">@g.OwedToHandlerName</span>
+                                </td>
+
+                                <td style="font-size: 12.5px;">
+                                    <div class="@((showOverdueColumn || g.IsOverdue) ? "text-danger fw-bold" : "text-dark")">
+                                        @FormatDate(g.DueDate)
+                                    </div>
+                                    @if (g.IsOverdue && g.MaxOverdueDays > 0)
+                                    {
+                                        <div class="text-danger" style="font-size: 11px;">Trễ @g.MaxOverdueDays ngày</div>
+                                    }
+                                </td>
+
+                                <td>
+                                    @if (g.UnpaidCount == 0)
+                                    {
+                                        <span class="vcb-status-pill pill-green">
+                                            <span class="dot"></span>Đã trả đủ (@g.PaidCount/@g.Items.Count)
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="vcb-status-pill pill-amber">
+                                            <span class="dot"></span>Còn nợ @g.UnpaidCount/@g.Items.Count CT
+                                        </span>
+                                        @if (g.PaidCount > 0)
+                                        {
+                                            <div class="text-success mt-1" style="font-size: 11px;">Đã trả: @g.PaidCount CT</div>
+                                        }
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @RenderPaginationBar(pager, totalDocs, totalPages, startIndex, endIndex, "hồ sơ")
+        }
+        else
+        {
+            var pagedRows = pager.Apply(rows, out var totalItems, out var totalPages, out var startIndex, out var endIndex);
+
+            <div class="table-responsive">
+                <table class="table vcb-table mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th>HỒ SƠ / KHÁCH HÀNG</th>
+                            <th>CHỨNG TỪ NỢ</th>
+                            <th>CỦA AI TẠO</th>
+                            <th>NỢ AI (ĐƠN VỊ NHẬN)</th>
+                            <th>HẠN THANH TOÁN</th>
+                            <th>TRẠNG THÁI TRẢ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in pagedRows)
+                        {
+                            <tr style="cursor: pointer;" @onclick="() => OnSelectDocument.InvokeAsync(r.DocumentId)">
+                                <td>
+                                    <div class="d-flex flex-wrap align-items-center gap-1">
+                                        <span class="fw-semibold text-muted" style="font-family: monospace; font-size: 12px;">
+                                            @r.DocumentNumber
+                                        </span>
+                                        @if (r.WorkflowType == WorkflowDirectPdv)
+                                        {
+                                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" style="font-size: 10px;">
+                                                Chuyển thẳng PDV
+                                            </span>
+                                        }
+                                    </div>
+                                    <div class="fw-bold" style="font-size: 13.5px;">
+                                        @r.CustomerName
+                                        @if (!string.IsNullOrWhiteSpace(r.CustomerCif))
+                                        {
+                                            <span class="fw-normal text-muted" style="font-size: 12px;"> · CIF: @r.CustomerCif</span>
+                                        }
+                                    </div>
+                                </td>
+
+                                <td>
+                                    <div class="fw-semibold" style="font-size: 13.5px;">📄 @r.ItemName</div>
+                                    <div class="text-muted" style="font-size: 11.5px;">Trạng thái HS: @StatusLabel(r.DocumentStatus)</div>
+                                </td>
+
+                                <td>
+                                    <span class="fw-semibold text-dark" style="font-size: 13px;">@r.CreatedByName</span>
+                                </td>
+
+                                <td>
+                                    <span class="vcb-dept-pill me-1">@r.OwedToDepartment</span>
+                                    <span class="small text-dark">@r.OwedToHandlerName</span>
+                                </td>
+
+                                <td style="font-size: 12.5px;">
+                                    <div class="@((showOverdueColumn || r.IsOverdue) ? "text-danger fw-bold" : "text-dark")">
+                                        @FormatDate(r.DueDate)
+                                    </div>
+                                    @if (r.IsOverdue && r.OverdueDays > 0)
+                                    {
+                                        <div class="text-danger" style="font-size: 11px;">Trễ @r.OverdueDays ngày</div>
+                                    }
+                                </td>
+
+                                <td>
+                                    @if (r.IsPaid)
+                                    {
+                                        <span class="vcb-status-pill pill-green">
+                                            <span class="dot"></span>Đã trả
+                                        </span>
+                                        @if (r.VerifiedAt.HasValue)
+                                        {
+                                            <div class="text-muted mt-1" style="font-size: 11px;">XN: @FormatVnTime(r.VerifiedAt.Value)</div>
+                                        }
+                                    }
+                                    else if (r.IsSupplemented)
+                                    {
+                                        <span class="vcb-status-pill pill-blue">
+                                            <span class="dot"></span>Chưa trả (Chờ @r.OwedToDepartment XN)
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="vcb-status-pill pill-amber">
+                                            <span class="dot"></span>Chưa trả (Chưa bổ sung)
+                                        </span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @RenderPaginationBar(pager, totalItems, totalPages, startIndex, endIndex, "chứng từ")
+        }
+    };
+
+    RenderFragment RenderPqlnReceivedReport(PqlnReceivedReportDto rec) => __builder =>
+    {
+        var filteredDocs = rec.Documents
+            .Where(d =>
+            {
+                if (receivedStatusFilter == "unpaid" && d.UnpaidPkhItems == 0) return false;
+                if (receivedStatusFilter == "paid" && d.UnpaidPkhItems > 0) return false;
+                if (!string.IsNullOrEmpty(creatorFilter) && d.PqlnReceiverName != creatorFilter && d.PkhCreatorName != creatorFilter) return false;
+                if (!string.IsNullOrWhiteSpace(searchText))
+                {
+                    var q = searchText.Trim().ToLower();
+                    var hit = d.DocumentNumber.ToLower().Contains(q)
+                           || d.CustomerName.ToLower().Contains(q)
+                           || (d.CustomerCif?.ToLower().Contains(q) ?? false)
+                           || d.PkhCreatorName.ToLower().Contains(q)
+                           || d.PqlnReceiverName.ToLower().Contains(q)
+                           || d.Items.Any(i => i.ItemName.ToLower().Contains(q));
+                    if (!hit) return false;
+                }
+                return true;
+            })
+            .ToList();
+
+        var handlers = rec.Documents
+            .Select(d => d.PqlnReceiverName)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct()
+            .OrderBy(x => x)
+            .ToList();
+
+        <div class="vcb-kpi-grid-compact mb-3">
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num">@rec.TotalDocuments</div>
+                    <div class="kpi-lbl">Tổng văn bản nhận PKH</div>
+                </div>
+                <div class="kpi-ico" style="background: #eaf5ee; color: #0a7a42;">📁</div>
+            </div>
+
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num">@rec.TotalPkhDebtItems</div>
+                    <div class="kpi-lbl">Tổng chứng từ nợ PKH</div>
+                </div>
+                <div class="kpi-ico" style="background: #eaf1fd; color: #1d63d0;">📄</div>
+            </div>
+
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num text-danger">@rec.UnpaidItemsCount</div>
+                    <div class="kpi-lbl">Chứng từ chưa trả</div>
+                </div>
+                <div class="kpi-ico" style="background: #fee2e2; color: #dc2626;">!</div>
+            </div>
+
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num text-success">@rec.PaidItemsCount</div>
+                    <div class="kpi-lbl">Chứng từ đã trả</div>
+                </div>
+                <div class="kpi-ico" style="background: #e6f7ed; color: #0e8a4a;">✓</div>
+            </div>
+        </div>
+
+        <div class="vcb-surface p-3 px-4 mb-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <div class="vcb-input-wrap" style="width: 260px;">
+                        <span class="vcb-input-icon" style="font-size: 13px;">🔍</span>
+                        <input class="vcb-input" style="height: 36px; font-size: 13px;"
+                               value="@searchText"
+                               @oninput="e => { searchText = e.Value?.ToString() ?? string.Empty; pqlnReceivedPager.Page = 1; }"
+                               placeholder="Tìm số VB, CIF, cán bộ PKH/PQLN..." />
+                    </div>
+
+                    <select class="form-select form-select-sm rounded-3" style="width: 210px; height: 36px;"
+                            value="@creatorFilter"
+                            @onchange="e => { creatorFilter = e.Value?.ToString() ?? string.Empty; pqlnReceivedPager.Page = 1; }">
+                        <option value="">Tất cả CB PQLN tiếp nhận</option>
+                        @foreach (var h in handlers)
+                        {
+                            <option value="@h">@h</option>
+                        }
+                    </select>
+
+                    <select class="form-select form-select-sm rounded-3" style="width: 195px; height: 36px;"
+                            value="@receivedStatusFilter"
+                            @onchange="e => { receivedStatusFilter = e.Value?.ToString() ?? string.Empty; pqlnReceivedPager.Page = 1; }">
+                        <option value="all">Tất cả văn bản (@rec.Documents.Count)</option>
+                        <option value="unpaid">Còn CT chưa trả (@rec.Documents.Count(x => x.UnpaidPkhItems > 0))</option>
+                        <option value="paid">Đã trả đủ CT (@rec.Documents.Count(x => x.UnpaidPkhItems == 0))</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="vcb-surface">
+            @if (filteredDocs.Count == 0)
+            {
+                <div class="p-4 text-center text-muted small">Không có văn bản tiếp nhận từ PKH phù hợp bộ lọc.</div>
+            }
+            else
+            {
+                var pagedDocs = pqlnReceivedPager.Apply(filteredDocs, out var totalItems, out var totalPages, out var startIndex, out var endIndex);
+
+                <div class="table-responsive">
+                    <table class="table vcb-table mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>VĂN BẢN / KHÁCH HÀNG</th>
+                                <th>CỦA AI (PKH NỢ)</th>
+                                <th>CB PQLN TIẾP NHẬN</th>
+                                <th>CHI TIẾT CHỨNG TỪ NỢ (ĐÃ TRẢ / CHƯA TRẢ)</th>
+                                <th>TIẾN ĐỘ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var d in pagedDocs)
+                            {
+                                <tr style="cursor: pointer;" @onclick="() => OnSelectDocument.InvokeAsync(d.DocumentId)">
+                                    <td>
+                                        <div class="fw-semibold text-muted" style="font-family: monospace; font-size: 12px;">
+                                            @d.DocumentNumber
+                                        </div>
+                                        <div class="fw-bold" style="font-size: 13.5px;">
+                                            @d.CustomerName
+                                            @if (!string.IsNullOrWhiteSpace(d.CustomerCif))
+                                            {
+                                                <span class="fw-normal text-muted" style="font-size: 12px;"> · CIF: @d.CustomerCif</span>
+                                            }
+                                        </div>
+                                        <div class="mt-1 @(d.IsOverdue ? "text-danger fw-semibold" : "text-muted")" style="font-size: 11.5px;">
+                                            Hạn: @FormatDate(d.DueDate) @(d.IsOverdue ? "(Quá hạn)" : "")
+                                        </div>
+                                    </td>
+
+                                    <td>
+                                        <span class="fw-semibold text-dark" style="font-size: 13px;">@d.PkhCreatorName</span>
+                                        <div class="text-muted" style="font-size: 11.5px;">Phòng Khách hàng</div>
+                                    </td>
+
+                                    <td>
+                                        <span class="fw-semibold text-primary" style="font-size: 13px;">@d.PqlnReceiverName</span>
+                                    </td>
+
+                                    <td>
+                                        <div class="d-flex flex-column gap-1">
+                                            @foreach (var it in d.Items)
+                                            {
+                                                <div class="d-flex align-items-center justify-content-between gap-2 small py-1 px-2 rounded-2"
+                                                     style="background: @(it.IsPaid ? "#f0fdf4" : "#fef2f2");">
+                                                    <span>📄 @it.ItemName</span>
+                                                    @if (it.IsPaid)
+                                                    {
+                                                        <span class="badge bg-success-subtle text-success">Đã trả</span>
+                                                    }
+                                                    else if (it.IsSupplemented)
+                                                    {
+                                                        <span class="badge bg-primary-subtle text-primary">Chờ PQLN XN</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-danger-subtle text-danger">Chưa trả</span>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    </td>
+
+                                    <td>
+                                        <div class="fw-bold @(d.UnpaidPkhItems == 0 ? "text-success" : "text-danger")" style="font-size: 13px;">
+                                            Đã trả: @d.PaidPkhItems/@d.TotalPkhItems
+                                        </div>
+                                        @if (d.UnpaidPkhItems > 0)
+                                        {
+                                            <div class="text-danger" style="font-size: 11.5px;">Còn nợ: @d.UnpaidPkhItems CT</div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @RenderPaginationBar(pqlnReceivedPager, totalItems, totalPages, startIndex, endIndex, "văn bản")
+            }
+        </div>
+    };
+
+    RenderFragment RenderPdvDocumentSummary(SupPdvFullReportDto pdv) => __builder =>
+    {
+        var pdvHandlers = pdv.Documents
+            .Select(d => d.PdvReceiverName)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct()
+            .OrderBy(x => x)
+            .ToList();
+
+        var filteredSummaries = pdv.Documents
+            .Where(d =>
+            {
+                if (!string.IsNullOrEmpty(pdvWorkflowFilter) && d.WorkflowType != pdvWorkflowFilter)
+                    return false;
+
+                if (!string.IsNullOrEmpty(creatorFilter) && d.PdvReceiverName != creatorFilter)
+                    return false;
+
+                var totalUnpaid = d.PkhUnpaidItems + d.PqlnUnpaidItems;
+                if (pdvDocDebtFilter == "any_unpaid" && totalUnpaid == 0) return false;
+                if (pdvDocDebtFilter == "pkh_unpaid" && d.PkhUnpaidItems == 0) return false;
+                if (pdvDocDebtFilter == "pqln_unpaid" && d.PqlnUnpaidItems == 0) return false;
+                if (pdvDocDebtFilter == "fully_paid" && totalUnpaid > 0) return false;
+
+                if (!string.IsNullOrWhiteSpace(searchText))
+                {
+                    var q = searchText.Trim().ToLower();
+                    var hit = d.DocumentNumber.ToLower().Contains(q)
+                           || d.CustomerName.ToLower().Contains(q)
+                           || (d.CustomerCif?.ToLower().Contains(q) ?? false)
+                           || d.PkhCreatorName.ToLower().Contains(q)
+                           || d.PqlnHandlerName.ToLower().Contains(q)
+                           || d.PdvReceiverName.ToLower().Contains(q);
+                    if (!hit) return false;
+                }
+                return true;
+            })
+            .ToList();
+
+        <div class="vcb-kpi-grid-compact mb-3">
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num">@pdv.TotalDocuments</div>
+                    <div class="kpi-lbl">Tổng văn bản tại PDV</div>
+                </div>
+                <div class="kpi-ico" style="background: #eaf5ee; color: #0a7a42;">📁</div>
+            </div>
+
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num text-danger">@pdv.DocumentsWithUnpaidDebt</div>
+                    <div class="kpi-lbl">VB còn nợ chứng từ</div>
+                </div>
+                <div class="kpi-ico" style="background: #fee2e2; color: #dc2626;">!</div>
+            </div>
+
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num text-primary">@pdv.PkhPaidItems / @pdv.PkhTotalItems</div>
+                    <div class="kpi-lbl">Nợ của PKH (Đã trả)</div>
+                </div>
+                <div class="kpi-ico" style="background: #eaf1fd; color: #1d63d0;">🏢</div>
+            </div>
+
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num text-success">@pdv.PqlnPaidItems / @pdv.PqlnTotalItems</div>
+                    <div class="kpi-lbl">Nợ của PQLN (Đã trả)</div>
+                </div>
+                <div class="kpi-ico" style="background: #e6f7ed; color: #0e8a4a;">📋</div>
+            </div>
+        </div>
+
+        <div class="vcb-surface p-3 px-4 mb-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <div class="vcb-input-wrap" style="width: 250px;">
+                        <span class="vcb-input-icon" style="font-size: 13px;">🔍</span>
+                        <input class="vcb-input" style="height: 36px; font-size: 13px;"
+                               value="@searchText"
+                               @oninput="e => { searchText = e.Value?.ToString() ?? string.Empty; pdvSummaryPager.Page = 1; }"
+                               placeholder="Tìm số VB, CIF, cán bộ..." />
+                    </div>
+
+                    <select class="form-select form-select-sm rounded-3" style="width: 195px; height: 36px;"
+                            value="@creatorFilter"
+                            @onchange="e => { creatorFilter = e.Value?.ToString() ?? string.Empty; pdvSummaryPager.Page = 1; }">
+                        <option value="">Tất cả CB PDV tiếp nhận</option>
+                        @foreach (var h in pdvHandlers)
+                        {
+                            <option value="@h">@h</option>
+                        }
+                    </select>
+
+                    <select class="form-select form-select-sm rounded-3" style="width: 190px; height: 36px;"
+                            value="@pdvDocDebtFilter"
+                            @onchange="e => { pdvDocDebtFilter = e.Value?.ToString() ?? string.Empty; pdvSummaryPager.Page = 1; }">
+                        <option value="all">Tất cả văn bản (@pdv.Documents.Count)</option>
+                        <option value="any_unpaid">Còn nợ CT (@pdv.DocumentsWithUnpaidDebt)</option>
+                        <option value="pkh_unpaid">Còn nợ PKH (@pdv.Documents.Count(x => x.PkhUnpaidItems > 0))</option>
+                        <option value="pqln_unpaid">Còn nợ PQLN (@pdv.Documents.Count(x => x.PqlnUnpaidItems > 0))</option>
+                        <option value="fully_paid">Đã trả đủ / Không nợ (@pdv.DocumentsFullyPaidOrNoDebt)</option>
+                    </select>
+
+                    <select class="form-select form-select-sm rounded-3" style="width: 185px; height: 36px;"
+                            value="@pdvWorkflowFilter"
+                            @onchange="e => { pdvWorkflowFilter = e.Value?.ToString() ?? string.Empty; pdvSummaryPager.Page = 1; }">
+                        <option value="">Mọi luồng xử lý</option>
+                        <option value="pkh_pqln_pdv">Tiêu chuẩn (PKH→PQLN→PDV)</option>
+                        <option value="pkh_pdv">Chuyển thẳng (PKH→PDV)</option>
+                    </select>
+                </div>
+
+                <button type="button"
+                        class="btn btn-sm bg-white border rounded-3 px-3 fw-medium"
+                        style="height: 36px;"
+                        @onclick="() => ExportPdvSummaryCsv(filteredSummaries)">
+                    ⬇ Xuất CSV tổng hợp
+                </button>
+            </div>
+        </div>
+
+        <div class="vcb-surface">
+            @if (filteredSummaries.Count == 0)
+            {
+                <div class="p-4 text-center text-muted small">Không có văn bản nào tại PDV phù hợp điều kiện lọc.</div>
+            }
+            else
+            {
+                var pagedSummaries = pdvSummaryPager.Apply(filteredSummaries, out var totalItems, out var totalPages, out var startIndex, out var endIndex);
+
+                <div class="table-responsive">
+                    <table class="table vcb-table mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>VĂN BẢN / KHÁCH HÀNG</th>
+                                <th>CÁN BỘ PHỤ TRÁCH</th>
+                                <th>NỢ CỦA PKH</th>
+                                <th>NỢ CỦA PQLN</th>
+                                <th>HẠN & TRẠNG THÁI HS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var d in pagedSummaries)
+                            {
+                                <tr style="cursor: pointer;" @onclick="() => OnSelectDocument.InvokeAsync(d.DocumentId)">
+                                    <td>
+                                        <div class="d-flex flex-wrap align-items-center gap-1">
+                                            <span class="fw-semibold text-muted" style="font-family: monospace; font-size: 12px;">
+                                                @d.DocumentNumber
+                                            </span>
+                                            @if (d.WorkflowType == WorkflowDirectPdv)
+                                            {
+                                                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" style="font-size: 10px;">
+                                                    Chuyển thẳng PDV
+                                                </span>
+                                            }
+                                        </div>
+                                        <div class="fw-bold mt-1" style="font-size: 13.5px;">
+                                            @d.CustomerName
+                                            @if (!string.IsNullOrWhiteSpace(d.CustomerCif))
+                                            {
+                                                <span class="fw-normal text-muted" style="font-size: 12px;"> · CIF: @d.CustomerCif</span>
+                                            }
+                                        </div>
+                                    </td>
+
+                                    <td style="font-size: 12.5px;">
+                                        <div><span class="text-muted">PKH tạo:</span> <b>@d.PkhCreatorName</b></div>
+                                        <div><span class="text-muted">PQLN:</span> <b>@d.PqlnHandlerName</b></div>
+                                        <div><span class="text-muted">PDV nhận:</span> <b class="text-success">@d.PdvReceiverName</b></div>
+                                    </td>
+
+                                    <td>
+                                        @if (d.PkhTotalItems == 0)
+                                        {
+                                            <span class="text-muted small">Không có</span>
+                                        }
+                                        else if (d.PkhUnpaidItems == 0)
+                                        {
+                                            <span class="vcb-status-pill pill-green">
+                                                <span class="dot"></span>Đã trả (@d.PkhPaidItems/@d.PkhTotalItems)
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="vcb-status-pill pill-amber">
+                                                <span class="dot"></span>Còn nợ @d.PkhUnpaidItems/@d.PkhTotalItems
+                                            </span>
+                                        }
+                                    </td>
+
+                                    <td>
+                                        @if (d.PqlnTotalItems == 0)
+                                        {
+                                            <span class="text-muted small">Không có</span>
+                                        }
+                                        else if (d.PqlnUnpaidItems == 0)
+                                        {
+                                            <span class="vcb-status-pill pill-green">
+                                                <span class="dot"></span>Đã trả (@d.PqlnPaidItems/@d.PqlnTotalItems)
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="vcb-status-pill pill-amber">
+                                                <span class="dot"></span>Còn nợ @d.PqlnUnpaidItems/@d.PqlnTotalItems
+                                            </span>
+                                        }
+                                    </td>
+
+                                    <td style="font-size: 12.5px;">
+                                        <span class="vcb-status-pill @StatusPillClass(d.DocumentStatus)">
+                                            <span class="dot"></span>@StatusLabel(d.DocumentStatus)
+                                        </span>
+                                        <div class="mt-1 @(d.IsOverdue ? "text-danger fw-bold" : "text-muted")">
+                                            Hạn: @FormatDate(d.DueDate) @(d.IsOverdue ? $"(Trễ {d.OverdueDays} ngày)" : "")
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @RenderPaginationBar(pdvSummaryPager, totalItems, totalPages, startIndex, endIndex, "văn bản")
+            }
+        </div>
+    };
+
+    RenderFragment RenderPdvDeptDebtList(
+        List<SupDebtItemReportRow> items,
+        TablePager pager,
+        string sourceDeptLabel,
+        bool isPkhSource) => __builder =>
+    {
+        var creators = items
+            .Select(x => x.CreatedByName)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct()
+            .OrderBy(x => x)
+            .ToList();
+
+        var filteredItems = items
+            .Where(r =>
+            {
+                if (!MatchRow(r)) return false;
+                if (pdvDebtStatusFilter == "unpaid" && r.IsPaid) return false;
+                if (pdvDebtStatusFilter == "paid" && !r.IsPaid) return false;
+                if (pdvDebtStatusFilter == "overdue_unpaid" && (r.IsPaid || !r.IsOverdue)) return false;
+                return true;
+            })
+            .ToList();
+
+        var paidCount = items.Count(x => x.IsPaid);
+        var unpaidCount = items.Count - paidCount;
+        var overdueUnpaidCount = items.Count(x => !x.IsPaid && x.IsOverdue);
+
+        <div class="vcb-kpi-grid-compact mb-3">
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num">@items.Count</div>
+                    <div class="kpi-lbl">Tổng CT nợ của @sourceDeptLabel</div>
+                </div>
+                <div class="kpi-ico" style="background: #eaf5ee; color: #0a7a42;">📄</div>
+            </div>
+
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num text-danger">@unpaidCount</div>
+                    <div class="kpi-lbl">Chưa trả</div>
+                </div>
+                <div class="kpi-ico" style="background: #fee2e2; color: #dc2626;">!</div>
+            </div>
+
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num text-warning">@overdueUnpaidCount</div>
+                    <div class="kpi-lbl">Quá hạn chưa trả</div>
+                </div>
+                <div class="kpi-ico" style="background: #fef3c7; color: #b45309;">⏱</div>
+            </div>
+
+            <div class="vcb-kpi-btn">
+                <div>
+                    <div class="kpi-num text-success">@paidCount</div>
+                    <div class="kpi-lbl">Đã trả</div>
+                </div>
+                <div class="kpi-ico" style="background: #e6f7ed; color: #0e8a4a;">✓</div>
+            </div>
+        </div>
+
+        <div class="vcb-surface p-3 px-4 mb-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <div class="vcb-input-wrap" style="width: 250px;">
+                        <span class="vcb-input-icon" style="font-size: 13px;">🔍</span>
+                        <input class="vcb-input" style="height: 36px; font-size: 13px;"
+                               value="@searchText"
+                               @oninput="e => { searchText = e.Value?.ToString() ?? string.Empty; pager.Page = 1; }"
+                               placeholder="Tìm số VB, CIF, chứng từ nợ..." />
+                    </div>
+
+                    <select class="form-select form-select-sm rounded-3" style="width: 210px; height: 36px;"
+                            value="@creatorFilter"
+                            @onchange="e => { creatorFilter = e.Value?.ToString() ?? string.Empty; pager.Page = 1; }">
+                        <option value="">Tất cả CB @sourceDeptLabel tạo (@creators.Count)</option>
+                        @foreach (var c in creators)
+                        {
+                            <option value="@c">@c</option>
+                        }
+                    </select>
+
+                    <select class="form-select form-select-sm rounded-3" style="width: 195px; height: 36px;"
+                            value="@pdvDebtStatusFilter"
+                            @onchange="e => { pdvDebtStatusFilter = e.Value?.ToString() ?? string.Empty; pager.Page = 1; }">
+                        <option value="all">Tất cả chứng từ (@items.Count)</option>
+                        <option value="unpaid">Chưa trả (@unpaidCount)</option>
+                        <option value="overdue_unpaid">Quá hạn chưa trả (@overdueUnpaidCount)</option>
+                        <option value="paid">Đã trả (@paidCount)</option>
+                    </select>
+                </div>
+
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    @RenderGroupingToggle()
+
+                    <button type="button"
+                            class="btn btn-sm bg-white border rounded-3 px-3 fw-medium"
+                            style="height: 36px;"
+                            @onclick="() => ExportPdvDeptDebtCsv(filteredItems, sourceDeptLabel)">
+                        ⬇ Xuất CSV nợ @sourceDeptLabel
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="vcb-surface">
+            <div class="p-3 px-4 border-bottom d-flex justify-content-between align-items-center" style="background: #f8fafc;">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="fw-bold text-dark" style="font-size: 14.5px;">Danh sách chứng từ nợ của @sourceDeptLabel</span>
+                    <span class="badge rounded-pill bg-secondary-subtle text-dark">
+                        @filteredItems.Count CT · @filteredItems.Select(x => x.DocumentId).Distinct().Count() VB
+                    </span>
+                </div>
+                <span class="small text-muted">
+                    Đã trả: <b>@filteredItems.Count(x => x.IsPaid)</b> · Chưa trả: <b>@filteredItems.Count(x => !x.IsPaid)</b>
+                </span>
+            </div>
+
+            @RenderDebtItemReportTable(filteredItems, pager, showOverdueColumn: false)
+        </div>
+    };
+
+    async Task ExportOriginatedCsv(SupOriginatedDebtReportDto report, bool isPqlnOriginated)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Phân loại hạn,Tình trạng trả,Số văn bản,Khách hàng,Mã CIF,Tên chứng từ nợ,Cán bộ tạo,Đơn vị nhận nợ,Cán bộ nhận nợ,Hạn thanh toán,Số ngày trễ");
+
+        void AppendRows(string groupLabel, IEnumerable<SupDebtItemReportRow> list)
+        {
+            foreach (var r in list.Where(MatchRow))
+            {
+                var paidText = r.IsPaid ? "Đã trả" : "Chưa trả";
+                sb.AppendLine($"\"{groupLabel}\",\"{paidText}\",\"{r.DocumentNumber}\",\"{r.CustomerName}\",\"{r.CustomerCif ?? ""}\",\"{r.ItemName}\",\"{r.CreatedByName}\",\"{r.OwedToDepartment}\",\"{r.OwedToHandlerName}\",\"{FormatDate(r.DueDate)}\",{r.OverdueDays}");
+            }
+        }
+
+        AppendRows("Đúng hạn", report.OnTimeItems);
+        AppendRows("Quá hạn", report.OverdueUnpaidItems);
+        AppendRows("Quá hạn", report.OverduePaidItems);
+
+        var prefix = isPqlnOriginated ? "Bao_cao_SUP_PQLN_KhoiTao" : "Bao_cao_SUP_PKH";
+        await DownloadCsvAsync(sb.ToString(), $"{prefix}_{DateTime.UtcNow.AddHours(7):yyyyMMdd_HHmm}.csv");
+    }
+
+    async Task ExportPdvSummaryCsv(List<PdvDocumentSummaryRow> rows)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Số văn bản,Khách hàng,Mã CIF,Luồng xử lý,CB PKH tạo,CB PQLN xử lý,CB PDV nhận,Nợ PKH đã trả,Tổng nợ PKH,Nợ PQLN đã trả,Tổng nợ PQLN,Hạn thanh toán,Trạng thái HS");
+        foreach (var d in rows)
+        {
+            var wfLabel = d.WorkflowType == WorkflowDirectPdv ? "Chuyển thẳng PDV" : "Tiêu chuẩn";
+            sb.AppendLine($"\"{d.DocumentNumber}\",\"{d.CustomerName}\",\"{d.CustomerCif ?? ""}\",\"{wfLabel}\",\"{d.PkhCreatorName}\",\"{d.PqlnHandlerName}\",\"{d.PdvReceiverName}\",{d.PkhPaidItems},{d.PkhTotalItems},{d.PqlnPaidItems},{d.PqlnTotalItems},\"{FormatDate(d.DueDate)}\",\"{StatusLabel(d.DocumentStatus)}\"");
+        }
+        await DownloadCsvAsync(sb.ToString(), $"Bao_cao_SUP_PDV_TongHop_{DateTime.UtcNow.AddHours(7):yyyyMMdd_HHmm}.csv");
+    }
+
+    async Task ExportPdvDeptDebtCsv(List<SupDebtItemReportRow> rows, string sourceDeptLabel)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Nguồn nợ,Tình trạng trả,Số văn bản,Khách hàng,Mã CIF,Tên chứng từ nợ,Cán bộ tạo,Đơn vị nhận xác nhận,Cán bộ nhận xác nhận,Hạn thanh toán,Số ngày trễ");
+        foreach (var r in rows)
+        {
+            var paidText = r.IsPaid ? "Đã trả" : "Chưa trả";
+            sb.AppendLine($"\"{sourceDeptLabel}\",\"{paidText}\",\"{r.DocumentNumber}\",\"{r.CustomerName}\",\"{r.CustomerCif ?? ""}\",\"{r.ItemName}\",\"{r.CreatedByName}\",\"{r.OwedToDepartment}\",\"{r.OwedToHandlerName}\",\"{FormatDate(r.DueDate)}\",{r.OverdueDays}");
+        }
+        await DownloadCsvAsync(sb.ToString(), $"Bao_cao_SUP_PDV_No_{sourceDeptLabel}_{DateTime.UtcNow.AddHours(7):yyyyMMdd_HHmm}.csv");
+    }
+
+    async Task DownloadCsvAsync(string csvContent, string fileName)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetPreamble()
+            .Concat(System.Text.Encoding.UTF8.GetBytes(csvContent))
+            .ToArray();
+        var base64 = Convert.ToBase64String(bytes);
+
+        await JS.InvokeVoidAsync("eval",
+            $"var a=document.createElement('a');a.href='data:text/csv;charset=utf-8;base64,{base64}';a.download='{fileName}';document.body.appendChild(a);a.click();document.body.removeChild(a);");
+    }
+}

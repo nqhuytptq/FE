@@ -57,14 +57,13 @@ internal static class DebtDocumentRules
             : WorkflowStandard;
 
     /// <summary>Quyền xem hồ sơ: admin/SUP PKH xem toàn bộ; SUP PQLN xem hồ sơ từ khi chuyển sang PQLN; SUP PDV xem hồ sơ từ khi chuyển sang PDV; nhân viên chỉ xem hồ sơ của mình.</summary>
-    public static bool CanView(AppUser user, Department? dept, DebtDocument d)
+public static bool CanView(AppUser user, Department? dept, DebtDocument d)
     {
         if (user.Role == "admin") return true;
 
         var code = dept?.Code;
         var wf = NormalizeWorkflowType(d.WorkflowType);
 
-        // Phòng PQLN không xem được các hồ sơ thuộc luồng chuyển thẳng PKH -> PDV
         if (code == "PQLN" && wf == WorkflowDirectPdv)
             return false;
 
@@ -76,6 +75,7 @@ internal static class DebtDocumentRules
                     || d.Status is DocumentStatus.PqlnPendingReceive
                         or DocumentStatus.PqlnReceived
                         or DocumentStatus.PqlnPendingSup
+                        or DocumentStatus.ReturnedToPqln
                         or DocumentStatus.PdvPendingReceive
                         or DocumentStatus.PdvReceived
                         or DocumentStatus.PdvEntryPosted
@@ -103,17 +103,22 @@ internal static class DebtDocumentRules
     }
 
     /// <summary>Quyền sửa thông tin hồ sơ: NV PKH sửa hồ sơ mình tạo; NV PQLN sửa hồ sơ mình tiếp nhận.</summary>
-    public static bool CanEdit(AppUser user, Department? dept, DebtDocument d)
-    {
-        if (user.Role is "admin" or "manager") return false;
-        var code = dept?.Code;
-        if (code == "PKH") return d.CreatedByUserId == user.Id && d.CurrentDepartmentId == dept!.Id;
-        if (code == "PQLN" && NormalizeWorkflowType(d.WorkflowType) == WorkflowStandard)
-            return (d.CurrentDepartmentId == dept?.Id && d.Status == DocumentStatus.PqlnPendingReceive) || d.PqlnReceiverId == user.Id;
-        return false;
-    }
+        public static bool CanEdit(AppUser user, Department? dept, DebtDocument d)
+            {
+                if (user.Role is "admin" or "manager") return false;
+                var code = dept?.Code;
+                if (code == "PKH")
+                    return d.CreatedByUserId == user.Id
+                        && d.CurrentDepartmentId == dept!.Id
+                        && d.Status is DocumentStatus.PkhPendingSup or DocumentStatus.ReturnedToPkh;
+                if (code == "PQLN" && NormalizeWorkflowType(d.WorkflowType) == WorkflowStandard)
+                    return d.CurrentDepartmentId == dept?.Id
+                        && ((d.Status == DocumentStatus.PqlnPendingReceive)
+                            || (d.PqlnReceiverId == user.Id && d.Status is DocumentStatus.PqlnReceived or DocumentStatus.ReturnedToPqln));
+                return false;
+            }
 
-    public static DebtDocumentDto Map(DebtDocument d, Guid? pkhDeptId = null, Guid? pqlnDeptId = null) => new(
+        public static DebtDocumentDto Map(DebtDocument d, Guid? pkhDeptId = null, Guid? pqlnDeptId = null) => new(
         d.Id, d.DocumentNumber, d.CustomerName, d.CustomerCif,
         NormalizeCustomerType(d.CustomerType),
         NormalizeWorkflowType(d.WorkflowType),
@@ -126,7 +131,8 @@ internal static class DebtDocumentRules
         d.PdvReceiverId, d.PdvReceiver?.Name, d.PdvReceivedAt,
         d.EntryPostedAt, d.CompletedAt,
         d.DebtItems.Count, SupplementedCount(d, pkhDeptId, pqlnDeptId),
-        d.CreatedAt, d.UpdatedAt);
+        d.CreatedAt, d.UpdatedAt,
+        d.ReturnReason, d.ReturnedAt, d.ReturnedByUserId, d.ReturnedByUserName, d.ReturnedFromDepartmentCode);
 
     public static DebtItemDto Item(DebtItem x, string? pqlnVerifierName = null, string? pdvVerifierName = null) => new(
         x.Id, x.DebtDocumentId, x.ItemName, x.IsSupplemented,
@@ -134,8 +140,8 @@ internal static class DebtDocumentRules
         x.SourceDepartmentId, x.SourceDepartment?.Name, x.SourceDepartment?.Code,
         x.CreatedByUserId, x.CreatedByUser?.Name, x.CreatedAt,
         x.IsVerifiedByPqln, x.PqlnVerifiedAt, x.PqlnVerifiedByUserId, pqlnVerifierName,
-        x.IsVerifiedByPdv, x.PdvVerifiedAt, x.PdvVerifiedByUserId, pdvVerifierName);
-
+        x.IsVerifiedByPdv, x.PdvVerifiedAt, x.PdvVerifiedByUserId, pdvVerifierName,
+        x.LastRejectReason, x.RejectedAt, x.RejectedByUserId, x.RejectedByUserName, x.RejectedByDepartmentCode);
     public static CirculationHistoryDto Hist(CirculationHistory x) => new(
         x.Id, x.FromDepartmentId, x.FromDepartment?.Name,
         x.ToDepartmentId, x.ToDepartment?.Name,

@@ -10,4 +10,6 @@ public interface IDebtWorkflowService
     Task PdvPostEntryAsync(Guid id, string? n, Guid u);
     Task PdvSupApproveAsync(Guid id, string? n, Guid u);
     Task ReturnAsync(Guid id, Guid to, string? n, Guid u);
+    Task ReturnByCodeAsync(Guid id, string toDepartmentCode, string? n, Guid u);
+    Task ResubmitPkhAsync(Guid id, string? n, Guid u);
 }

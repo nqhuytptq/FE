@@ -20,12 +20,12 @@ public class DebtItemVerificationService(
         var canAdd = dept?.Code switch
         {
             "PKH" => isStaff
-                     && d.Status == DocumentStatus.PkhPendingSup
+                     && d.Status is DocumentStatus.PkhPendingSup or DocumentStatus.ReturnedToPkh
                      && d.CreatedByUserId == u,
 
             "PQLN" => isStaff
                       && NormalizeWorkflowType(d.WorkflowType) == WorkflowStandard
-                      && d.Status is DocumentStatus.PqlnReceived or DocumentStatus.PqlnPendingSup
+                      && d.Status is DocumentStatus.PqlnReceived or DocumentStatus.PqlnPendingSup or DocumentStatus.ReturnedToPqln
                       && d.PqlnReceiverId == u,
 
             _ => false
@@ -77,13 +77,13 @@ public class DebtItemVerificationService(
         var allowed = dept?.Code switch
         {
             "PKH" => isStaff
-                     && document.Status == DocumentStatus.PkhPendingSup
+                     && document.Status is DocumentStatus.PkhPendingSup or DocumentStatus.ReturnedToPkh
                      && document.CreatedByUserId == userId
                      && item.SourceDepartmentId == dept.Id,
 
             "PQLN" => isStaff
                       && NormalizeWorkflowType(document.WorkflowType) == WorkflowStandard
-                      && document.Status is DocumentStatus.PqlnReceived or DocumentStatus.PqlnPendingSup
+                      && document.Status is DocumentStatus.PqlnReceived or DocumentStatus.PqlnPendingSup or DocumentStatus.ReturnedToPqln
                       && document.PqlnReceiverId == userId
                       && item.SourceDepartmentId == dept.Id,
 
@@ -162,6 +162,11 @@ public class DebtItemVerificationService(
             x.IsSupplemented = true;
             x.SupplementedAt = DateTime.UtcNow;
             x.SupplementedByUserId = u;
+            x.LastRejectReason = null;
+            x.RejectedAt = null;
+            x.RejectedByUserId = null;
+            x.RejectedByUserName = null;
+            x.RejectedByDepartmentCode = null;
             await docs.UpdateDebtItemAsync(x);
             supplementedNames.Add(x.ItemName);
         }
@@ -301,5 +306,76 @@ public class DebtItemVerificationService(
             : $"{r.Notes.Trim()} ({itemsText})";
 
         await audit.AddHistoryAsync(id, d.CurrentDepartmentId, d.CurrentDepartmentId, CirculationAction.Supplemented, d.Status, u, note);
+    }
+    public async Task RejectSupplementItemAsync(Guid documentId, Guid itemId, RejectSupplementItemRequest request, Guid userId)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            throw new InvalidOperationException("Vui lòng nhập lý do từ chối chứng từ bổ sung.");
+
+        var (user, dept) = await GetActorAsync(users, departments, userId);
+        if (user.Role != "staff" || dept == null)
+            throw new UnauthorizedAccessException("Chỉ cán bộ chuyên trách đang thụ lý hồ sơ mới được quyền từ chối chứng từ bổ sung.");
+
+        var d = await docs.GetDetailByIdAsync(documentId)
+            ?? throw new InvalidOperationException("Hồ sơ không tồn tại.");
+
+        var item = d.DebtItems.FirstOrDefault(x => x.Id == itemId)
+            ?? throw new InvalidOperationException("Không tìm thấy chứng từ nợ.");
+
+        if (!item.IsSupplemented)
+            throw new InvalidOperationException("Chứng từ này chưa được đánh dấu bổ sung.");
+
+        var isDirectPdv = NormalizeWorkflowType(d.WorkflowType) == WorkflowDirectPdv;
+        var pkh = await departments.GetByCodeAsync("PKH");
+        var pqln = await departments.GetByCodeAsync("PQLN");
+
+        var isPkhItem = item.SourceDepartmentId == null || (pkh != null && item.SourceDepartmentId == pkh.Id);
+        var isPqlnItem = pqln != null && item.SourceDepartmentId == pqln.Id;
+
+        bool allowed;
+        if (isPkhItem)
+        {
+            if (isDirectPdv)
+            {
+                allowed = dept.Code == "PDV" && d.PdvReceiverId == userId && !item.IsVerifiedByPdv;
+            }
+            else
+            {
+                allowed = dept.Code == "PQLN" && d.PqlnReceiverId == userId && !item.IsVerifiedByPqln;
+            }
+        }
+        else if (isPqlnItem && !isDirectPdv)
+        {
+            allowed = dept.Code == "PDV" && d.PdvReceiverId == userId && !item.IsVerifiedByPdv;
+        }
+        else
+        {
+            allowed = false;
+        }
+
+        if (!allowed)
+            throw new UnauthorizedAccessException("Bạn không có quyền từ chối chứng từ này hoặc chứng từ đã được xác nhận.");
+
+        var reason = request.Reason.Trim();
+        item.IsSupplemented = false;
+        item.SupplementedAt = null;
+        item.SupplementedByUserId = null;
+        item.LastRejectReason = reason;
+        item.RejectedAt = DateTime.UtcNow;
+        item.RejectedByUserId = userId;
+        item.RejectedByUserName = user.Name;
+        item.RejectedByDepartmentCode = dept.Code;
+
+        await docs.UpdateDebtItemAsync(item);
+
+        var sourceCode = isPkhItem ? "PKH" : "PQLN";
+        await audit.AddHistoryAsync(
+            documentId,
+            d.CurrentDepartmentId,
+            d.CurrentDepartmentId,
+            CirculationAction.Returned,
+            d.Status,
+            userId,
+            $"NV {dept.Code} từ chối chứng từ bổ sung '{item.ItemName}' ({sourceCode}): {reason}");
     }
 }

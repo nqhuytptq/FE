@@ -78,7 +78,8 @@ public class DebtDocumentService(
             d.UpdatedAt,
             mappedItems,
             (await docs.GetHistoryAsync(id)).Select(Hist).ToList(),
-            (await docs.GetEditLogsAsync(id)).Select(Log).ToList());
+            (await docs.GetEditLogsAsync(id)).Select(Log).ToList(),
+            d.ReturnReason, d.ReturnedAt, d.ReturnedByUserId, d.ReturnedByUserName, d.ReturnedFromDepartmentCode);
     }
 
     public async Task<DebtDocumentDto> CreateAsync(CreateDebtDocumentRequest r, Guid uid)
@@ -147,7 +148,7 @@ public class DebtDocumentService(
         d.CustomerName = r.CustomerName.Trim();
         d.CustomerCif = string.IsNullOrWhiteSpace(r.CustomerCif) ? null : r.CustomerCif.Trim();
         d.CustomerType = NormalizeCustomerType(r.CustomerType);
-        if (d.Status == DocumentStatus.PkhPendingSup)
+        if (d.Status is DocumentStatus.PkhPendingSup or DocumentStatus.ReturnedToPkh)
             d.WorkflowType = NormalizeWorkflowType(r.WorkflowType);
         d.DueDate = DateOnly.Parse(r.DueDate);
         d.Priority = Enum.TryParse<DocumentPriority>(r.Priority, true, out var parsedPriority) ? parsedPriority : DocumentPriority.Normal;
@@ -189,4 +190,7 @@ public class DebtDocumentService(
     public Task SupplementItemsAsync(Guid id, SupplementItemsRequest r, Guid u) => itemsService.SupplementItemsAsync(id, r, u);
     public Task VerifySupplementItemsAsync(Guid id, VerifySupplementItemsRequest r, Guid u) => itemsService.VerifySupplementItemsAsync(id, r, u);
     public Task VerifyPqlnSupplementItemsAsync(Guid id, VerifyPqlnSupplementItemsRequest r, Guid u) => itemsService.VerifyPqlnSupplementItemsAsync(id, r, u);
+    public Task ReturnByCodeAsync(Guid id, string toDepartmentCode, string? n, Guid u) => workflow.ReturnByCodeAsync(id, toDepartmentCode, n, u);
+    public Task ResubmitPkhAsync(Guid id, string? n, Guid u) => workflow.ResubmitPkhAsync(id, n, u);
+    public Task RejectSupplementItemAsync(Guid documentId, Guid itemId, RejectSupplementItemRequest request, Guid userId) => itemsService.RejectSupplementItemAsync(documentId, itemId, request, userId);
 }

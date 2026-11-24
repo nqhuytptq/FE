@@ -97,10 +97,37 @@ public class DebtDocumentsController(IDebtDocumentService service) : ControllerB
     public async Task<IActionResult> DeleteDebtItem(Guid documentId, Guid itemId)
     { try { await service.DeleteDebtItemAsync(documentId, itemId, CurrentUserId); return NoContent(); } catch (UnauthorizedAccessException ex) { return StatusCode(403, new { error = ex.Message }); } catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); } }
 
-    [HttpPost("{id:guid}/return")]
+   [HttpPost("{id:guid}/return")]
     public async Task<IActionResult> Return(Guid id, [FromBody] ReturnDocumentRequest request)
-    { try { await service.ReturnAsync(id, request.ToDepartmentId, request.Notes, CurrentUserId); return NoContent(); } catch (Exception ex) { return BadRequest(new { error = ex.Message }); } }
+    {
+        try { await service.ReturnAsync(id, request.ToDepartmentId, request.Notes, CurrentUserId); return NoContent(); }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new { error = ex.Message }); }
+        catch (Exception ex) { return BadRequest(new { error = ex.Message }); }
+    }
+    [HttpPost("{id:guid}/return-by-code")]
+    public async Task<IActionResult> ReturnByCode(Guid id, [FromBody] ReturnByCodeRequest request)
+    {
+        try { await service.ReturnByCodeAsync(id, request.ToDepartmentCode, request.Notes, CurrentUserId); return NoContent(); }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new { error = ex.Message }); }
+        catch (Exception ex) { return BadRequest(new { error = ex.Message }); }
+    }
+    [HttpPost("{id:guid}/pkh-resubmit")]
+    public async Task<IActionResult> PkhResubmit(Guid id, [FromBody] ActionWithNotesRequest request)
+    {
+        try { await service.ResubmitPkhAsync(id, request?.Notes, CurrentUserId); return NoContent(); }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new { error = ex.Message }); }
+        catch (Exception ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpPost("{documentId:guid}/debt-items/{itemId:guid}/reject")]
+    public async Task<IActionResult> RejectDebtItem(Guid documentId, Guid itemId, [FromBody] RejectSupplementItemRequest request)
+    {
+        try { await service.RejectSupplementItemAsync(documentId, itemId, request, CurrentUserId); return NoContent(); }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new { error = ex.Message }); }
+        catch (Exception ex) { return BadRequest(new { error = ex.Message }); }
+    }
 }
 
 public record ReturnDocumentRequest(Guid ToDepartmentId, string? Notes);
+public record ReturnByCodeRequest(string ToDepartmentCode, string? Notes);
 

@@ -78,6 +78,7 @@
                     <option value="PKH">PKH</option>
                     <option value="PQLN">PQLN</option>
                     <option value="PDV">PDV</option>
+                    <option value="PKT">PKT</option>
                 </select>
 
                 <select class="form-select form-select-sm rounded-3" style="width: 162px; height: 35px;"
@@ -85,6 +86,7 @@
                         @onchange="OnFilterStatusChanged">
                     <option value="">Mọi trạng thái</option>
                     <option value="pending">Chờ duyệt / nhận</option>
+                    <option value="returned">Bị trả lại</option>
                     <option value="processing">Đang thụ lý</option>
                     <option value="supplement">Chờ bổ sung CT</option>
                     <option value="completed">Hoàn tất</option>
@@ -359,6 +361,7 @@ else
             if (FilterStatus == "pending" && d.Status is not ("PkhPendingSup" or "PqlnPendingReceive" or "PqlnPendingSup" or "PdvPendingReceive")) return false;
             if (FilterStatus == "processing" && d.Status is not ("PqlnReceived" or "PdvReceived" or "PdvEntryPosted")) return false;
             if (FilterStatus == "supplement" && !(d.TotalDebtItems > d.SupplementedDebtItems)) return false;
+            if (FilterStatus == "returned" && d.Status is not ("ReturnedToPkh" or "ReturnedToPqln")) return false;
             if (FilterStatus == "completed" && d.Status != "Completed") return false;
 
             if (!string.IsNullOrWhiteSpace(searchText))
@@ -432,6 +435,7 @@ else
                     var actionLabel = MyActionText(d);
                     var isMyTurn = actionLabel != null;
                     var isOverdue = IsOverdue(d);
+                    var isReturned = d.Status is "ReturnedToPkh" or "ReturnedToPqln";
                     var pct = d.TotalDebtItems == 0 ? 100 : (int)Math.Round(100.0 * d.SupplementedDebtItems / d.TotalDebtItems);
 
                     <tr class="@(isMyTurn ? "vcb-row-action" : "")" style="cursor: pointer;" @onclick="() => OnSelectDocument.InvokeAsync(d.Id)">
@@ -458,6 +462,12 @@ else
                                     <span class="fw-normal text-muted" style="font-size: 12.5px;"> · CIF: @d.CustomerCif</span>
                                 }
                             </div>
+                            @if (isReturned && !string.IsNullOrWhiteSpace(d.ReturnReason))
+                            {
+                                <div class="text-danger mt-1" style="font-size: 11.5px;">
+                                    ↩ Trả từ @(d.ReturnedFromDepartmentCode ?? "—"): @d.ReturnReason
+                                </div>
+                            }
                         </td>
 
                         <td>
@@ -472,8 +482,9 @@ else
                         <td>
                             <div class="d-flex flex-wrap align-items-center gap-1">
                                 <span class="vcb-dept-pill">@d.CurrentDepartmentCode</span>
-                                <span class="vcb-status-pill @StatusPillClass(d.Status)">
-                                    <span class="dot"></span>
+                                <span class="vcb-status-pill @StatusPillClass(d.Status)"
+                                      style="@(isReturned ? "background:#fde8e8;color:#b91c1c;border-color:#f8b4b4;" : "")">
+                                    <span class="dot" style="@(isReturned ? "background:#dc2626;" : "")"></span>
                                     @StatusLabel(d.Status)
                                 </span>
                             </div>

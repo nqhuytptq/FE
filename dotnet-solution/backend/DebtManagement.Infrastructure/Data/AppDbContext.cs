@@ -85,6 +85,11 @@ public class AppDbContext : DbContext
             e.Property(d => d.CompletedByUserId).HasColumnName("completed_by_user_id");
             e.HasOne(d => d.CurrentDepartment).WithMany()
              .HasForeignKey(d => d.CurrentDepartmentId).OnDelete(DeleteBehavior.SetNull);
+            e.Property(d => d.ReturnReason).HasColumnName("return_reason").HasMaxLength(2000);
+            e.Property(d => d.ReturnedAt).HasColumnName("returned_at");
+            e.Property(d => d.ReturnedByUserId).HasColumnName("returned_by_user_id");
+            e.Property(d => d.ReturnedByUserName).HasColumnName("returned_by_user_name").HasMaxLength(100);
+            e.Property(d => d.ReturnedFromDepartmentCode).HasColumnName("returned_from_department_code").HasMaxLength(20);
             e.HasOne(d => d.CreatedByUser).WithMany()
              .HasForeignKey(d => d.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(d => d.PqlnReceiver).WithMany()
@@ -116,6 +121,11 @@ public class AppDbContext : DbContext
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.HasOne(i => i.DebtDocument).WithMany(d => d.DebtItems)
              .HasForeignKey(i => i.DebtDocumentId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(i => i.LastRejectReason).HasColumnName("last_reject_reason").HasMaxLength(1000);
+            e.Property(i => i.RejectedAt).HasColumnName("rejected_at");
+            e.Property(i => i.RejectedByUserId).HasColumnName("rejected_by_user_id");
+            e.Property(i => i.RejectedByUserName).HasColumnName("rejected_by_user_name").HasMaxLength(100);
+            e.Property(i => i.RejectedByDepartmentCode).HasColumnName("rejected_by_department_code").HasMaxLength(20);
             e.HasOne(i => i.SupplementedByUser).WithMany()
              .HasForeignKey(i => i.SupplementedByUserId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne<AppUser>().WithMany()

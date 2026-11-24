@@ -23,6 +23,12 @@ public class DebtItem
     // Người khai báo chứng từ
     public Guid? CreatedByUserId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    // --- Thông tin từ chối bổ sung ---
+    public string? LastRejectReason { get; set; }
+    public DateTime? RejectedAt { get; set; }
+    public Guid? RejectedByUserId { get; set; }
+    public string? RejectedByUserName { get; set; }
+    public string? RejectedByDepartmentCode { get; set; }
 
     public DebtDocument? DebtDocument { get; set; }
     public AppUser? SupplementedByUser { get; set; }

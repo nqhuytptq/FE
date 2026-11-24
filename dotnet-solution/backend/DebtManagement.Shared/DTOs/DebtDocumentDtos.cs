@@ -29,7 +29,12 @@ public record DebtItemDto(
     bool IsVerifiedByPdv = false,
     DateTime? PdvVerifiedAt = null,
     Guid? PdvVerifiedByUserId = null,
-    string? PdvVerifiedByUserName = null);
+    string? PdvVerifiedByUserName = null,
+    string? LastRejectReason = null,
+    DateTime? RejectedAt = null,
+    Guid? RejectedByUserId = null,
+    string? RejectedByUserName = null,
+    string? RejectedByDepartmentCode = null);
 
 
 public record SupplementItemsRequest(List<Guid> SupplementedItemIds, string? Notes);
@@ -65,7 +70,12 @@ public record DebtDocumentDto(
     int TotalDebtItems,
     int SupplementedDebtItems,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    string? ReturnReason = null,
+    DateTime? ReturnedAt = null,
+    Guid? ReturnedByUserId = null,
+    string? ReturnedByUserName = null,
+    string? ReturnedFromDepartmentCode = null);
 
 public record DebtDocumentDetailDto(
     Guid Id,
@@ -110,7 +120,12 @@ public record DebtDocumentDetailDto(
     DateTime UpdatedAt,
     IReadOnlyList<DebtItemDto> DebtItems,
     IReadOnlyList<CirculationHistoryDto> CirculationHistory,
-    IReadOnlyList<EditLogDto> EditLogs);
+    IReadOnlyList<EditLogDto> EditLogs,
+    string? ReturnReason = null,
+    DateTime? ReturnedAt = null,
+    Guid? ReturnedByUserId = null,
+    string? ReturnedByUserName = null,
+    string? ReturnedFromDepartmentCode = null);
 public record CirculationHistoryDto(
     Guid Id, Guid? FromDepartmentId, string? FromDepartmentName,
     Guid? ToDepartmentId, string? ToDepartmentName,
@@ -157,3 +172,4 @@ public class UpdateDebtDocumentRequest
 public record ActionWithNotesRequest(string? Notes);
 public record VerifySupplementItemsRequest(List<Guid> ItemIds, string? Notes = null);
 public record VerifyPqlnSupplementItemsRequest(List<Guid> ItemIds, string? Notes = null);
+public record RejectSupplementItemRequest(string Reason);

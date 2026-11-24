@@ -26,5 +26,8 @@ public interface IDebtDocumentService
     Task UpdateDebtItemAsync(Guid documentId, Guid itemId, UpdateDebtItemRequest request, Guid userId);
     Task DeleteDebtItemAsync(Guid documentId, Guid itemId, Guid userId);
     Task ReturnAsync(Guid id, Guid toDepartmentId, string? notes, Guid userId);
+    Task ReturnByCodeAsync(Guid id, string toDepartmentCode, string? notes, Guid userId);
+    Task ResubmitPkhAsync(Guid id, string? notes, Guid userId);
+    Task RejectSupplementItemAsync(Guid documentId, Guid itemId, RejectSupplementItemRequest request, Guid userId);
     Task DeleteAsync(Guid id);
 }

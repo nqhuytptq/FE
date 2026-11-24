@@ -1,3 +1,4 @@
+@using static DebtManagement.Shared.Constants.WorkflowConstants
 @using static DebtManagement.BlazorApp.Models.DebtUiHelpers
 @inject BlazorSession Session
 
@@ -6,7 +7,9 @@
         <div class="d-flex align-items-center gap-2 text-muted" style="font-size: 12px;">
             <span>VCB Debt Management</span>
             <span>/</span>
-            <span class="text-success fw-semibold">@(ShowUsers ? "Quản trị người dùng" : "Hồ sơ văn bản nợ")</span>
+            <span class="text-success fw-semibold">
+                @(ShowUsers ? "Quản trị người dùng" : (ShowSupReport ? "Báo cáo SUP" : "Hồ sơ văn bản nợ"))
+            </span>
         </div>
         <div class="fw-semibold text-dark mt-1" style="font-size: 13px;">
             📅 @DateTime.UtcNow.AddHours(7).ToString("dddd, dd/MM/yyyy", new System.Globalization.CultureInfo("vi-VN"))
@@ -14,7 +17,7 @@
     </div>
 
     <div class="d-flex flex-wrap align-items-center gap-2">
-        @if (!ShowUsers && Session.CurrentUser?.DepartmentCode == "PKH" && Session.CurrentUser?.Role == "staff")
+        @if (!ShowUsers && !ShowSupReport && Session.CurrentUser?.DepartmentCode == DeptPkh && Session.CurrentUser?.Role == RoleStaff)
         {
             <button class="vcb-btn-primary px-3" style="height: 36px; font-size: 13px;"
                     @onclick="() => OnToggleCreateModal.InvokeAsync()">
@@ -22,7 +25,16 @@
             </button>
         }
 
-        @if (Session.CurrentUser?.Role == "admin")
+        @if (CanViewSupReport)
+        {
+            <button class="btn btn-sm @(ShowSupReport ? "btn-success" : "btn-outline-success") rounded-pill px-3 fw-semibold"
+                    style="height: 36px;"
+                    @onclick="() => OnToggleSupReport.InvokeAsync()">
+                @(ShowSupReport ? "← Danh sách hồ sơ" : "📊 Báo cáo SUP")
+            </button>
+        }
+
+        @if (Session.CurrentUser?.Role == RoleAdmin)
         {
             <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" style="height: 36px;"
                     @onclick="() => OnToggleUsers.InvokeAsync()">
@@ -30,7 +42,7 @@
             </button>
         }
 
-        @if (!ShowUsers && MyActionCount > 0)
+        @if (!ShowUsers && !ShowSupReport && MyActionCount > 0)
         {
             <button type="button"
                     class="btn btn-sm rounded-pill px-3 fw-semibold"
@@ -64,9 +76,16 @@
 
 @code {
     [Parameter] public bool ShowUsers { get; set; }
+    [Parameter] public bool ShowSupReport { get; set; }
     [Parameter] public int MyActionCount { get; set; }
     [Parameter] public EventCallback OnToggleCreateModal { get; set; }
     [Parameter] public EventCallback OnToggleUsers { get; set; }
+    [Parameter] public EventCallback OnToggleSupReport { get; set; }
     [Parameter] public EventCallback OnSelectMyActions { get; set; }
     [Parameter] public EventCallback OnLogout { get; set; }
+
+    bool CanViewSupReport =>
+        Session.CurrentUser?.Role == RoleAdmin
+        || (Session.CurrentUser?.Role == RoleManager
+            && Session.CurrentUser?.DepartmentCode is DeptPkh or DeptPqln or DeptPdv);
 }

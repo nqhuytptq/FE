@@ -14,6 +14,7 @@ public static class WorkflowConstants
     public const string DeptPkh = "PKH";
     public const string DeptPqln = "PQLN";
     public const string DeptPdv = "PDV";
+    public const string DeptPkt = "PKT";
 
     // Vai trò người dùng
     public const string RoleAdmin = "admin";
@@ -32,5 +33,7 @@ public static class WorkflowConstants
         public const string PdvEntryPosted = "PdvEntryPosted";
         public const string PdvEntryApproved = "PdvEntryApproved";
         public const string Completed = "Completed";
+        public const string ReturnedToPkh = "ReturnedToPkh";
+        public const string ReturnedToPqln = "ReturnedToPqln";
     }
 }

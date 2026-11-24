@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 
 ﻿using DebtManagement.Application.Interfaces;
@@ -16,10 +16,12 @@ builder.Services.AddScoped<IDebtDocumentRepository, DebtDocumentRepository>();
 builder.Services.AddScoped<IDepartmentRepository, DepartmentRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IDebtDocumentService, DebtDocumentService>();
+builder.Services.AddScoped<ISupReportService, SupReportService>();
 builder.Services.AddScoped<IDocumentAuditService, DocumentAuditService>();
 builder.Services.AddScoped<IDebtItemVerificationService, DebtItemVerificationService>();
 builder.Services.AddScoped<IDebtWorkflowService, DebtWorkflowService>();
 builder.Services.AddScoped<IDebtDocumentService, DebtDocumentService>();
+builder.Services.AddScoped<ISupReportService, SupReportService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ProtectedLocalStorage>();

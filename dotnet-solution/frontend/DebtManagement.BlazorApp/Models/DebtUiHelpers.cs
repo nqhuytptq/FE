@@ -63,6 +63,7 @@ public static class DebtUiHelpers
         StatusNames.Completed => "pill-green",
         StatusNames.PqlnReceived or StatusNames.PdvReceived or StatusNames.PdvEntryPosted => "pill-blue",
         StatusNames.PdvEntryApproved or StatusNames.PkhPendingSup or StatusNames.PqlnPendingReceive or StatusNames.PqlnPendingSup or StatusNames.PdvPendingReceive => "pill-amber",
+        StatusNames.ReturnedToPkh or StatusNames.ReturnedToPqln => "pill-red",
         _ => "pill-gray"
     };
 
@@ -76,6 +77,8 @@ public static class DebtUiHelpers
         StatusNames.PdvReceived => "PDV tiếp nhận",
         StatusNames.PdvEntryPosted => "Chờ SUP PDV duyệt",
         StatusNames.PdvEntryApproved => "Chờ bổ sung CT",
+        StatusNames.ReturnedToPkh => "Trả về PKH",
+        StatusNames.ReturnedToPqln => "Trả về PQLN",
         StatusNames.Completed => "Hoàn tất",
         _ => s
     };
@@ -83,14 +86,15 @@ public static class DebtUiHelpers
     public static string CurrentHandlerText(DebtDocumentDto d) => d.Status switch
     {
         StatusNames.PkhPendingSup => $"Chờ SUP PKH ({d.CreatedByUserName})",
+        StatusNames.ReturnedToPkh => $"PKH sửa lại ({d.CreatedByUserName})",
         StatusNames.PqlnPendingReceive => "PQLN: Chờ tiếp nhận",
         StatusNames.PqlnReceived or StatusNames.PqlnPendingSup => $"PQLN: {d.PqlnReceiverName ?? "—"}",
+        StatusNames.ReturnedToPqln => $"PQLN xử lý lại ({d.PqlnReceiverName ?? "—"})",
         StatusNames.PdvPendingReceive => "PDV: Chờ tiếp nhận",
         StatusNames.PdvReceived or StatusNames.PdvEntryPosted or StatusNames.PdvEntryApproved => $"PDV: {d.PdvReceiverName ?? "—"}",
         StatusNames.Completed => $"Hoàn tất ({d.PdvReceiverName ?? d.CreatedByUserName})",
         _ => d.CreatedByUserName ?? "—"
     };
-
     public static bool IsItemFullyCompleted(DebtItemDto x, bool isDirectPdv)
     {
         if (!x.IsSupplemented) return false;
@@ -125,14 +129,18 @@ public static class DebtUiHelpers
 
         if (role == RoleStaff)
         {
-            if (deptCode == DeptPkh && d.CreatedByUserId == userId.Value && d.TotalDebtItems > d.SupplementedDebtItems)
-                return "Bổ sung CT";
+            if (deptCode == DeptPkh && d.CreatedByUserId == userId.Value)
+            {
+                if (d.Status == StatusNames.ReturnedToPkh) return "Sửa & gửi lại";
+                if (d.TotalDebtItems > d.SupplementedDebtItems) return "Bổ sung CT";
+            }
 
             if (deptCode == DeptPqln && d.WorkflowType != WorkflowDirectPdv)
             {
                 if (d.Status == StatusNames.PqlnPendingReceive) return "Tiếp nhận";
                 if (d.PqlnReceiverId == userId.Value)
                 {
+                    if (d.Status == StatusNames.ReturnedToPqln) return "Xử lý trả lại";
                     if (d.Status == StatusNames.PqlnReceived) return "Đẩy SUP PQLN";
                     if (d.TotalDebtItems > d.SupplementedDebtItems) return "Bổ sung / XN CT";
                 }

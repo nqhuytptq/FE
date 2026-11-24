@@ -4,6 +4,7 @@
 @using DebtManagement.BlazorApp.Components.Features.Auth
 @using DebtManagement.BlazorApp.Components.Features.Admin
 @using DebtManagement.BlazorApp.Components.Features.Documents
+@using DebtManagement.BlazorApp.Components.Features.Reports
 @using DebtManagement.BlazorApp.Components.Layout
 @using static DebtManagement.BlazorApp.Models.DebtUiHelpers
 @inject BlazorSession Session
@@ -24,15 +25,21 @@ else if (!Session.IsAuthenticated)
 else
 {
     <TopBar ShowUsers="showUsers"
+            ShowSupReport="showSupReport"
             MyActionCount="MyActionCount"
             OnToggleCreateModal="() => showCreateModal = !showCreateModal"
-            OnToggleUsers="() => showUsers = !showUsers"
-            OnSelectMyActions='() => { quickTab = "mine"; filterStatus = ""; }'
+            OnToggleUsers="() => { showUsers = !showUsers; if (showUsers) showSupReport = false; }"
+            OnToggleSupReport="() => { showSupReport = !showSupReport; if (showSupReport) showUsers = false; }"
+            OnSelectMyActions='() => { showUsers = false; showSupReport = false; quickTab = "mine"; filterStatus = ""; }'
             OnLogout="LogoutAsync" />
 
     @if (showUsers)
     {
         <UserManagementView />
+    }
+    else if (showSupReport)
+    {
+        <SupReportView OnSelectDocument="id => selectedDocId = id" />
     }
     else
     {
@@ -52,6 +59,7 @@ else
 @code {
     bool showCreateModal;
     bool showUsers;
+    bool showSupReport;
     string filterStatus = "";
     string quickTab = "mine";
     List<DebtDocumentDto> docs = new();
@@ -83,5 +91,6 @@ else
         docs.Clear();
         selectedDocId = null;
         showUsers = false;
+        showSupReport = false;
     }
 }
