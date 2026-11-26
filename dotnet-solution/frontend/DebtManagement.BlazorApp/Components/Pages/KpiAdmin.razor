@@ -1,0 +1,725 @@
+﻿@page "/kpi-admin"
+@using DebtManagement.Shared.DTOs
+@using DebtManagement.Shared.Constants
+@using DebtManagement.Application.Interfaces
+@inject BlazorSession Session
+@inject IKpiCalculationService KpiService
+@inject IWorkingCalendarService CalendarService
+@inject IJSRuntime JS
+
+<PageTitle>Chấm điểm KPI Chứng từ nợ</PageTitle>
+
+@if (Session.CurrentUser == null)
+{
+    <div class="alert alert-warning">Vui lòng đăng nhập để tiếp tục.</div>
+}
+else if (Session.CurrentUser.Role != WorkflowConstants.RoleAdmin)
+{
+    <div class="alert alert-danger">Chỉ tài khoản Quản trị viên (Admin) mới có quyền truy cập chức năng chấm điểm KPI.</div>
+}
+else
+{
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+            <h4 class="fw-bold mb-1" style="letter-spacing: -0.3px;">Chấm điểm KPI Chứng từ nợ (Phần II)</h4>
+            <p class="text-muted small mb-0">Tổng hợp điểm trừ số lượng & thời gian nợ chứng từ theo phòng PKH, PQLN, PDV.</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger py-2 small">@errorMessage</div>
+    }
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success py-2 small">@successMessage</div>
+    }
+
+    <div class="vcb-surface mb-3 p-2 px-3">
+        <div class="vcb-tabs">
+            <button type="button" class="vcb-tab-btn @(activeTab == "report" ? "active" : "")" @onclick='() => activeTab = "report"'>
+                📊 Bảng điểm & Cộng dồn
+            </button>
+            <button type="button" class="vcb-tab-btn @(activeTab == "reconcile" ? "active" : "")" @onclick='() => SwitchToReconcileAsync()'>
+                ⚖️ Đối soát & Chốt kỳ tháng
+            </button>
+            <button type="button" class="vcb-tab-btn @(activeTab == "config" ? "active" : "")" @onclick='() => activeTab = "config"'>
+                ⚙️ Cấu hình & Lịch nghỉ lễ
+            </button>
+        </div>
+    </div>
+
+    @* TAB 1: BẢNG ĐIỂM & CỘNG DỒN *@
+    @if (activeTab == "report")
+    {
+        <div class="vcb-surface p-3 px-4 mb-3">
+            <div class="d-flex flex-wrap align-items-end gap-3">
+                <div>
+                    <label class="form-label small fw-semibold mb-1">Từ tháng</label>
+                    <div class="d-flex gap-1">
+                        <select class="form-select form-select-sm" style="width: 85px;" @bind="fromMonth">
+                            @for (int m = 1; m <= 12; m++)
+                            {
+                                <option value="@m">Tháng @m</option>
+                            }
+                        </select>
+                        <input type="number" class="form-control form-control-sm" style="width: 82px;" @bind="fromYear" />
+                    </div>
+                </div>
+                <div>
+                    <label class="form-label small fw-semibold mb-1">Đến tháng</label>
+                    <div class="d-flex gap-1">
+                        <select class="form-select form-select-sm" style="width: 85px;" @bind="toMonth">
+                            @for (int m = 1; m <= 12; m++)
+                            {
+                                <option value="@m">Tháng @m</option>
+                            }
+                        </select>
+                        <input type="number" class="form-control form-control-sm" style="width: 82px;" @bind="toYear" />
+                    </div>
+                </div>
+                <button type="button" class="vcb-btn-primary px-3" style="height: 33px;" disabled="@isBusy" @onclick="LoadReportAsync">
+                    🔍 Xem báo cáo
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-success fw-semibold px-3" style="height: 33px;" disabled="@(isBusy || cumulativeReport == null)" @onclick="ExportExcelAsync">
+                    📥 Xuất Excel (.xlsx)
+                </button>
+            </div>
+        </div>
+
+        @if (cumulativeReport != null)
+        {
+            <div class="vcb-surface mb-3">
+                <div class="p-3 px-4 border-bottom fw-bold" style="background: #f8fbf9;">
+                    Tổng hợp điểm trừ cộng dồn (@cumulativeReport.FromMonth.ToString("D2")/@cumulativeReport.FromYear – @cumulativeReport.ToMonth.ToString("D2")/@cumulativeReport.ToYear)
+                </div>
+                @if (cumulativeReport.MonthlyBreakdown.Count == 0)
+                {
+                    <div class="p-4 text-center text-muted small">
+                        Chưa có kỳ nào được tính toán trong khoảng thời gian này. Hãy sang tab <b>Đối soát & Chốt kỳ tháng</b> để bấm tính toán dữ liệu tháng.
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table vcb-table mb-0">
+                            <thead>
+                                <tr>
+                                    <th>PHÒNG</th>
+                                    <th class="text-end">NGÀY PHÁT SINH NỢ</th>
+                                    <th class="text-end">NGÀY LÀM VIỆC</th>
+                                    <th class="text-end">TRỪ SL CT (II.1)</th>
+                                    <th class="text-end">SỐ CT TRỄ</th>
+                                    <th class="text-end">TỔNG NGÀY TRỄ</th>
+                                    <th class="text-end">TRỪ THỜI GIAN (II.2)</th>
+                                    <th class="text-end">TỔNG ĐIỂM TRỪ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var s in cumulativeReport.CumulativeScores)
+                                {
+                                    <tr>
+                                        <td>
+                                            <span class="vcb-dept-pill">@s.DepartmentCode</span>
+                                            <span class="fw-semibold ms-2">@s.DepartmentName</span>
+                                        </td>
+                                        <td class="text-end">@s.DistinctLateDays</td>
+                                        <td class="text-end">@s.WorkingDaysInMonth</td>
+                                        <td class="text-end fw-semibold text-warning-emphasis">-@s.CountPenalty.ToString("0.####")</td>
+                                        <td class="text-end">@s.ViolationItemCount</td>
+                                        <td class="text-end">@s.TotalDelayWorkingDays</td>
+                                        <td class="text-end fw-semibold text-warning-emphasis">-@s.DelayPenalty.ToString("0.####")</td>
+                                        <td class="text-end fw-bold text-danger">-@s.TotalPenalty.ToString("0.####")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+
+            @foreach (var m in cumulativeReport.MonthlyBreakdown)
+            {
+                <div class="vcb-surface mb-3">
+                    <div class="p-3 px-4 border-bottom d-flex justify-content-between align-items-center">
+                        <div class="fw-bold">
+                            Tháng @m.Month.ToString("D2")/@m.Year
+                            <span class="text-muted fw-normal small ms-2">(@m.WorkingDaysInMonth ngày làm việc)</span>
+                        </div>
+                        <span class="badge rounded-pill @(m.Status == "Finalized" ? "bg-success" : "bg-warning text-dark")">
+                            @(m.Status == "Finalized" ? "Đã chốt" : "Bản nháp")
+                        </span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table vcb-table mb-0 small">
+                            <thead>
+                                <tr>
+                                    <th>PHÒNG</th>
+                                    <th class="text-end">NGÀY NỢ (II.1)</th>
+                                    <th class="text-end">TRỪ II.1</th>
+                                    <th class="text-end">CT TRỄ (II.2)</th>
+                                    <th class="text-end">NGÀY TRỄ</th>
+                                    <th class="text-end">TRỪ II.2</th>
+                                    <th class="text-end">TỔNG TRỪ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var s in m.DepartmentScores)
+                                {
+                                    <tr>
+                                        <td><b>@s.DepartmentCode</b> · @s.DepartmentName</td>
+                                        <td class="text-end">@s.DistinctLateDays / @s.WorkingDaysInMonth</td>
+                                        <td class="text-end">-@s.CountPenalty.ToString("0.####")</td>
+                                        <td class="text-end">@s.ViolationItemCount</td>
+                                        <td class="text-end">@s.TotalDelayWorkingDays</td>
+                                        <td class="text-end">-@s.DelayPenalty.ToString("0.####")</td>
+                                        <td class="text-end fw-bold text-danger">-@s.TotalPenalty.ToString("0.####")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        }
+    }
+
+    @* TAB 2: ĐỐI SOÁT & CHỐT KỲ THÁNG *@
+    @if (activeTab == "reconcile")
+    {
+        <div class="vcb-surface p-3 px-4 mb-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-end gap-3">
+                <div class="d-flex align-items-end gap-2">
+                    <div>
+                        <label class="form-label small fw-semibold mb-1">Chọn tháng đối soát</label>
+                        <div class="d-flex gap-1">
+                            <select class="form-select form-select-sm" style="width: 100px;" @bind="recMonth">
+                                @for (int m = 1; m <= 12; m++)
+                                {
+                                    <option value="@m">Tháng @m</option>
+                                }
+                            </select>
+                            <input type="number" class="form-control form-control-sm" style="width: 85px;" @bind="recYear" />
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" style="height: 33px;" disabled="@isBusy" @onclick="LoadPeriodAsync">
+                        Xem kỳ
+                    </button>
+                    <button type="button" class="vcb-btn-primary px-3" style="height: 33px;"
+                            disabled="@(isBusy || periodDetail?.Status == "Finalized")"
+                            @onclick="CalculatePeriodAsync">
+                        ↻ Tính toán dữ liệu tháng
+                    </button>
+                </div>
+
+                @if (periodDetail != null)
+                {
+                    <div class="d-flex align-items-center gap-2">
+                        @if (periodDetail.Status == "Draft")
+                        {
+                            <input class="form-control form-control-sm" style="width: 220px;" @bind="finalizeNote" placeholder="Ghi chú chốt kỳ (nếu có)..." />
+                            <button type="button" class="btn btn-sm btn-success fw-semibold px-3" disabled="@isBusy" @onclick="FinalizePeriodAsync">
+                                🔒 Chốt kỳ KPI
+                            </button>
+                        }
+                        else
+                        {
+                            <span class="badge bg-success px-3 py-2">✓ Đã chốt lúc @(periodDetail.FinalizedAt?.AddHours(7).ToString("dd/MM/yyyy HH:mm"))</span>
+                            <button type="button" class="btn btn-sm btn-outline-warning fw-semibold" disabled="@isBusy" @onclick="ReopenPeriodAsync">
+                                🔓 Mở lại đối soát
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+
+            @if (periodDetail != null)
+            {
+                <div class="mt-3 pt-2 border-top d-flex flex-wrap gap-4 small text-muted">
+                    <span>Số ngày làm việc tháng: <b class="text-dark">@periodDetail.WorkingDaysInMonth ngày</b></span>
+                    <span>Mốc chốt phát sinh (Cutoff): <b class="text-dark">@periodDetail.CutoffDate.ToString("dd/MM/yyyy")</b></span>
+                    <span>Số dòng đối soát: <b class="text-dark">@periodDetail.Violations.Count</b></span>
+                </div>
+            }
+        </div>
+
+        @if (periodDetail != null)
+        {
+            <div class="row g-2 mb-3">
+                @foreach (var s in periodDetail.DepartmentScores)
+                {
+                    <div class="col-md-4">
+                        <div class="vcb-surface p-3 h-100">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="vcb-dept-pill">@s.DepartmentCode</span>
+                                <span class="fw-bold text-danger">-@s.TotalPenalty.ToString("0.####") điểm</span>
+                            </div>
+                            <div class="small text-muted">
+                                II.1: @s.DistinctLateDays ngày nợ (-@s.CountPenalty.ToString("0.####")) ·
+                                II.2: @s.ViolationItemCount CT / @s.TotalDelayWorkingDays ngày trễ (-@s.DelayPenalty.ToString("0.####"))
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="vcb-surface">
+                <div class="p-3 px-4 border-bottom fw-bold">
+                    Danh sách chứng từ chậm / nợ cần đối soát
+                </div>
+                @if (periodDetail.Violations.Count == 0)
+                {
+                    <div class="p-4 text-center text-success small fw-semibold">
+                        🎉 Không có chứng từ nào bị chậm hoặc nợ quá hạn trong kỳ này.
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table vcb-table mb-0 small">
+                            <thead>
+                                <tr>
+                                    <th>VĂN BẢN / CHỨNG TỪ</th>
+                                    <th>PHÁT SINH / HẠN SLA</th>
+                                    <th>THỜI GIAN GIỮ (NGÀY LV)</th>
+                                    <th>TRỄ & ĐIỂM II.2</th>
+                                    <th>PHÒNG CHỊU LỖI</th>
+                                    <th>LOẠI TRỪ / GHI CHÚ</th>
+                                    <th class="text-end">LƯU</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var v in periodDetail.Violations)
+                                {
+                                    var isLocked = periodDetail.Status == "Finalized";
+                                    var editState = GetEditState(v);
+                                    <tr class="@(v.IsExcluded ? "opacity-50" : "")">
+                                        <td>
+                                            <div class="fw-bold">@v.DocumentNumber</div>
+                                            <div>@v.CustomerName</div>
+                                            <div class="text-muted">📄 @v.ItemName</div>
+                                            @if (v.IsCarriedOver)
+                                            {
+                                                <span class="badge bg-info-subtle text-info-emphasis mt-1">Chuyển tiếp kỳ trước</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <div>PS: <b>@v.IssueDate.ToString("dd/MM/yyyy")</b></div>
+                                            <div>Hạn SLA: <b>@v.SlaDueDate.ToString("dd/MM/yyyy")</b></div>
+                                            <div>HT: <b>@(v.ActualCompletedDate?.ToString("dd/MM/yyyy") ?? "Chưa xong")</b></div>
+                                        </td>
+                                        <td>
+                                            <div>PKH: <b>@v.PkhDays</b>d</div>
+                                            @if (v.WorkflowType != WorkflowConstants.WorkflowDirectPdv)
+                                            {
+                                                <div>PQLN: <b>@v.PqlnDays</b>d</div>
+                                            }
+                                            <div>PDV: <b>@v.PdvDays</b>d</div>
+                                        </td>
+                                        <td>
+                                            <div class="fw-bold text-danger">@v.DelayWorkingDays ngày</div>
+                                            <div class="text-muted">-@v.CalculatedDelayPenalty.ToString("0.####") điểm</div>
+                                        </td>
+                                        <td>
+                                            <div class="text-muted mb-1" style="font-size: 11px;">Gợi ý: <b>@v.AutoSuggestedDepartmentCode</b></div>
+                                            <select class="form-select form-select-sm" style="width: 110px;" disabled="@isLocked"
+                                                    @bind="editState.DepartmentCode">
+                                                <option value="PKH">PKH</option>
+                                                <option value="PQLN">PQLN</option>
+                                                <option value="PDV">PDV</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <div class="form-check mb-1">
+                                                <input class="form-check-input" type="checkbox" disabled="@isLocked"
+                                                       @bind="editState.IsExcluded" />
+                                                <label class="form-check-label">Không tính KPI</label>
+                                            </div>
+                                            <input class="form-control form-control-sm" style="width: 170px;" disabled="@isLocked"
+                                                   @bind="editState.AdminNote" placeholder="Lý do điều chỉnh..." />
+                                        </td>
+                                        <td class="text-end">
+                                            @if (!isLocked)
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-primary"
+                                                        disabled="@isBusy"
+                                                        @onclick="() => SaveViolationOverrideAsync(v.Id, v.AutoSuggestedDepartmentCode, editState)">
+                                                    Lưu
+                                                </button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
+    }
+
+    @* TAB 3: CẤU HÌNH & LỊCH NGHỈ LỄ *@
+    @if (activeTab == "config")
+    {
+        <div class="row g-3">
+            <div class="col-lg-6">
+                <div class="vcb-surface p-3 px-4 h-100">
+                    <h6 class="fw-bold mb-3">Tham số công thức & SLA</h6>
+                    @if (configModel != null)
+                    {
+                        <div class="row g-2 small">
+                            <div class="col-md-6">
+                                <label class="form-label mb-1">Ngày hiệu lực</label>
+                                <input type="date" class="form-control form-control-sm" @bind="cfgEffectiveFrom" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label mb-1">Mốc hoàn tất chứng từ</label>
+                                <select class="form-select form-select-sm" @bind="cfgMilestone">
+                                    <option value="CompletedAt">CompletedAt (Duyệt hoàn tất)</option>
+                                    <option value="EntryPostedAt">EntryPostedAt (Đi bút toán)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label mb-1">Điểm trừ tối đa II.1/tháng</label>
+                                <input type="number" step="0.01" class="form-control form-control-sm" @bind="cfgMaxCountPenalty" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label mb-1">Hệ số trừ II.2</label>
+                                <input type="number" step="0.001" class="form-control form-control-sm" @bind="cfgDelayRate" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label mb-1">Chu kỳ (ngày làm việc)</label>
+                                <input type="number" class="form-control form-control-sm" @bind="cfgDelayCycle" />
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label mb-1">Cách tính làm tròn II.2</label>
+                                <select class="form-select form-select-sm" @bind="cfgRounding">
+                                    <option value="Linear">Tuyến tính: (Số ngày trễ / 5) * 0.01</option>
+                                    <option value="Floor">Block 5 ngày làm tròn xuống (Floor)</option>
+                                    <option value="Ceiling">Block 5 ngày làm tròn lên (Ceiling)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label mb-1">SLA PKH (ngày)</label>
+                                <input type="number" class="form-control form-control-sm" @bind="cfgSlaPkh" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label mb-1">SLA PQLN (ngày)</label>
+                                <input type="number" class="form-control form-control-sm" @bind="cfgSlaPqln" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label mb-1">SLA PDV (ngày)</label>
+                                <input type="number" class="form-control form-control-sm" @bind="cfgSlaPdv" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label mb-1">Tổng SLA thẳng PDV</label>
+                                <input type="number" class="form-control form-control-sm" @bind="cfgDirectPdvTotal" />
+                            </div>
+                        </div>
+                        <button type="button" class="vcb-btn-primary px-3 mt-3" style="height: 36px;" disabled="@isBusy" @onclick="SaveConfigAsync">
+                            💾 Lưu cấu hình KPI
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="vcb-surface p-3 px-4 h-100">
+                    <h6 class="fw-bold mb-3">Lịch ngày nghỉ lễ / làm bù</h6>
+                    <div class="row g-2 align-items-end mb-3 small">
+                        <div class="col-md-4">
+                            <label class="form-label mb-1">Ngày</label>
+                            <input type="date" class="form-control form-control-sm" @bind="newHolidayDate" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label mb-1">Loại ngày</label>
+                            <select class="form-select form-select-sm" @bind="newHolidayIsWorking">
+                                <option value="false">Nghỉ lễ</option>
+                                <option value="true">Làm bù (T7/CN)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label mb-1">Mô tả</label>
+                            <div class="d-flex gap-1">
+                                <input class="form-control form-control-sm" @bind="newHolidayDesc" placeholder="VD: Nghỉ lễ 2/9..." />
+                                <button type="button" class="btn btn-sm btn-success flex-shrink-0" disabled="@isBusy" @onclick="AddHolidayAsync">+ Thêm</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (holidays.Count == 0)
+                    {
+                        <div class="text-muted small py-3 text-center">Chưa khai báo ngày nghỉ lễ / làm bù riêng (hệ thống đang tự loại Thứ 7 & Chủ nhật).</div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive" style="max-height: 290px; overflow-y: auto;">
+                            <table class="table table-sm mb-0 small">
+                                <thead>
+                                    <tr>
+                                        <th>Ngày</th>
+                                        <th>Loại</th>
+                                        <th>Mô tả</th>
+                                        <th class="text-end">Xóa</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var h in holidays)
+                                    {
+                                        <tr>
+                                            <td><b>@h.HolidayDate.ToString("dd/MM/yyyy")</b></td>
+                                            <td>
+                                                <span class="badge @(h.IsWorkingDay ? "bg-primary-subtle text-primary" : "bg-danger-subtle text-danger")">
+                                                    @(h.IsWorkingDay ? "Làm bù" : "Nghỉ lễ")
+                                                </span>
+                                            </td>
+                                            <td>@h.Description</td>
+                                            <td class="text-end">
+                                                <button type="button" class="btn btn-link btn-sm text-danger p-0" @onclick="() => DeleteHolidayAsync(h.Id)">Xóa</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    class ViolationEditState
+    {
+        public string DepartmentCode { get; set; } = "PKH";
+        public bool IsExcluded { get; set; }
+        public string? AdminNote { get; set; }
+    }
+
+    string activeTab = "report";
+    bool isBusy;
+    string? errorMessage;
+    string? successMessage;
+
+    // Tab 1: Report
+    int fromMonth = 9;
+    int fromYear = 2026;
+    int toMonth = 11;
+    int toYear = 2026;
+    KpiCumulativeReportDto? cumulativeReport;
+
+    // Tab 2: Reconcile
+    int recMonth = DateTime.UtcNow.AddHours(7).Month;
+    int recYear = DateTime.UtcNow.AddHours(7).Year;
+    KpiPeriodDetailDto? periodDetail;
+    string finalizeNote = "";
+    Dictionary<Guid, ViolationEditState> editStates = new();
+
+    // Tab 3: Config & Holidays
+    KpiConfigDto? configModel;
+    DateOnly cfgEffectiveFrom = new(2026, 9, 1);
+    decimal cfgMaxCountPenalty = 0.25m;
+    decimal cfgDelayRate = 0.01m;
+    int cfgDelayCycle = 5;
+    string cfgRounding = "Linear";
+    string cfgMilestone = "CompletedAt";
+    int cfgSlaPkh = 6;
+    int cfgSlaPqln = 3;
+    int cfgSlaPdv = 3;
+    int cfgDirectPdvTotal = 9;
+
+    List<WorkCalendarHolidayDto> holidays = new();
+    DateOnly newHolidayDate = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
+    string newHolidayIsWorking = "false";
+    string newHolidayDesc = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.CurrentUser?.Role != WorkflowConstants.RoleAdmin) return;
+        await LoadConfigAndHolidaysAsync();
+        await LoadReportAsync();
+    }
+
+    async Task LoadConfigAndHolidaysAsync()
+    {
+        configModel = await KpiService.GetConfigAsync();
+        cfgEffectiveFrom = configModel.EffectiveFrom;
+        cfgMaxCountPenalty = configModel.MonthlyMaxCountPenalty;
+        cfgDelayRate = configModel.DelayPenaltyRate;
+        cfgDelayCycle = configModel.DelayCycleDays;
+        cfgRounding = configModel.DelayRoundingMode;
+        cfgMilestone = configModel.CompletionMilestoneType;
+        cfgSlaPkh = configModel.SlaPkhDays;
+        cfgSlaPqln = configModel.SlaPqlnDays;
+        cfgSlaPdv = configModel.SlaPdvDays;
+        cfgDirectPdvTotal = configModel.DirectPdvTotalSlaDays;
+
+        holidays = await CalendarService.GetHolidaysAsync();
+    }
+
+    async Task SwitchToReconcileAsync()
+    {
+        activeTab = "reconcile";
+        await LoadPeriodAsync();
+    }
+
+    async Task LoadReportAsync()
+    {
+        await RunSafeAsync(async () =>
+        {
+            cumulativeReport = await KpiService.GetCumulativeReportAsync(fromYear, fromMonth, toYear, toMonth);
+        });
+    }
+
+    async Task LoadPeriodAsync()
+    {
+        await RunSafeAsync(async () =>
+        {
+            periodDetail = await KpiService.GetPeriodAsync(recYear, recMonth);
+            SyncEditStates();
+        });
+    }
+
+    async Task CalculatePeriodAsync()
+    {
+        await RunSafeAsync(async () =>
+        {
+            periodDetail = await KpiService.CalculateOrRefreshPeriodAsync(recYear, recMonth, Session.CurrentUser!.Id);
+            SyncEditStates();
+            successMessage = $"Đã tính toán xong dữ liệu kỳ {recMonth:D2}/{recYear}.";
+        });
+    }
+
+    void SyncEditStates()
+    {
+        editStates.Clear();
+        if (periodDetail == null) return;
+        foreach (var v in periodDetail.Violations)
+        {
+            editStates[v.Id] = new ViolationEditState
+            {
+                DepartmentCode = v.FinalDepartmentCode,
+                IsExcluded = v.IsExcluded,
+                AdminNote = v.AdminNote
+            };
+        }
+    }
+
+    ViolationEditState GetEditState(KpiViolationItemDto v)
+    {
+        if (!editStates.TryGetValue(v.Id, out var s))
+        {
+            s = new ViolationEditState
+            {
+                DepartmentCode = v.FinalDepartmentCode,
+                IsExcluded = v.IsExcluded,
+                AdminNote = v.AdminNote
+            };
+            editStates[v.Id] = s;
+        }
+        return s;
+    }
+
+    async Task SaveViolationOverrideAsync(Guid violationId, string autoDept, ViolationEditState state)
+    {
+        await RunSafeAsync(async () =>
+        {
+            var overrideCode = state.DepartmentCode == autoDept ? null : state.DepartmentCode;
+            periodDetail = await KpiService.UpdateViolationOverrideAsync(
+                violationId,
+                new UpdateViolationOverrideRequest(overrideCode, state.IsExcluded, state.AdminNote),
+                Session.CurrentUser!.Id);
+            SyncEditStates();
+            successMessage = "Đã lưu điều chỉnh đối soát.";
+        });
+    }
+
+    async Task FinalizePeriodAsync()
+    {
+        await RunSafeAsync(async () =>
+        {
+            periodDetail = await KpiService.FinalizePeriodAsync(recYear, recMonth, finalizeNote, Session.CurrentUser!.Id);
+            SyncEditStates();
+            await LoadReportAsync();
+            successMessage = $"Đã chốt kỳ KPI {recMonth:D2}/{recYear}.";
+        });
+    }
+
+    async Task ReopenPeriodAsync()
+    {
+        await RunSafeAsync(async () =>
+        {
+            periodDetail = await KpiService.ReopenPeriodAsync(recYear, recMonth, Session.CurrentUser!.Id);
+            SyncEditStates();
+            successMessage = $"Đã mở lại kỳ {recMonth:D2}/{recYear} để đối soát.";
+        });
+    }
+
+    async Task SaveConfigAsync()
+    {
+        await RunSafeAsync(async () =>
+        {
+            configModel = await KpiService.UpdateConfigAsync(new UpdateKpiConfigRequest(
+                cfgEffectiveFrom, cfgMaxCountPenalty, cfgDelayRate, cfgDelayCycle,
+                cfgRounding, cfgMilestone, cfgSlaPkh, cfgSlaPqln, cfgSlaPdv, cfgDirectPdvTotal),
+                Session.CurrentUser!.Id);
+            successMessage = "Đã lưu cấu hình KPI.";
+        });
+    }
+
+    async Task AddHolidayAsync()
+    {
+        await RunSafeAsync(async () =>
+        {
+            await CalendarService.UpsertHolidayAsync(
+                new UpsertHolidayRequest(newHolidayDate, newHolidayIsWorking == "true", newHolidayDesc),
+                Session.CurrentUser!.Id);
+            newHolidayDesc = "";
+            holidays = await CalendarService.GetHolidaysAsync();
+            successMessage = "Đã cập nhật lịch làm việc.";
+        });
+    }
+
+    async Task DeleteHolidayAsync(Guid id)
+    {
+        await RunSafeAsync(async () =>
+        {
+            await CalendarService.DeleteHolidayAsync(id, Session.CurrentUser!.Id);
+            holidays = await CalendarService.GetHolidaysAsync();
+            successMessage = "Đã xóa ngày nghỉ lễ / làm bù.";
+        });
+    }
+
+    async Task ExportExcelAsync()
+    {
+        await RunSafeAsync(async () =>
+        {
+            var bytes = await KpiService.ExportCumulativeExcelAsync(fromYear, fromMonth, toYear, toMonth);
+            var base64 = Convert.ToBase64String(bytes);
+            var fileName = $"KPI_ChungTuNo_{fromYear}{fromMonth:D2}_{toYear}{toMonth:D2}.xlsx";
+            await JS.InvokeVoidAsync("eval",
+                $"var a=document.createElement('a');a.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{base64}';a.download='{fileName}';document.body.appendChild(a);a.click();a.remove();");
+        });
+    }
+
+    async Task RunSafeAsync(Func<Task> action)
+    {
+        if (isBusy) return;
+        isBusy = true;
+        errorMessage = null;
+        successMessage = null;
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}

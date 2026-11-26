@@ -26,6 +26,9 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ProtectedLocalStorage>();
 builder.Services.AddScoped<BlazorSession>();
+builder.Services.AddScoped<IKpiRepository, KpiRepository>();
+builder.Services.AddScoped<IWorkingCalendarService, WorkingCalendarService>();
+builder.Services.AddScoped<IKpiCalculationService, KpiCalculationService>();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 var app = builder.Build();

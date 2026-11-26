@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using DebtManagement.Shared.DTOs;
 using DebtManagement.Application.Interfaces;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
@@ -11,6 +11,7 @@ public sealed class BlazorSession(IAuthService authService, ProtectedLocalStorag
     public AppUserDto? CurrentUser { get; private set; }
     public bool IsInitialized { get; private set; }
     public bool IsAuthenticated => CurrentUser != null;
+    public event Action? OnChange;
 
     public async Task InitializeAsync()
     {
@@ -27,6 +28,7 @@ public sealed class BlazorSession(IAuthService authService, ProtectedLocalStorag
         finally
         {
             IsInitialized = true;
+            OnChange?.Invoke();
         }
     }
 
@@ -38,6 +40,7 @@ public sealed class BlazorSession(IAuthService authService, ProtectedLocalStorag
             CurrentUser = result?.User;
             if (CurrentUser != null)
                 await storage.SetAsync(StorageKey, CurrentUser);
+            OnChange?.Invoke();
             return result == null ? "Email hoặc mật khẩu không đúng" : null;
         }
         catch (Exception ex)
@@ -51,5 +54,7 @@ public sealed class BlazorSession(IAuthService authService, ProtectedLocalStorag
     {
         CurrentUser = null;
         try { await storage.DeleteAsync(StorageKey); } catch { }
+        OnChange?.Invoke();
     }
 }
+

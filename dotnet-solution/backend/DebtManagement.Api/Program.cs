@@ -41,6 +41,9 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
      .AllowAnyHeader().AllowAnyMethod()));
 
 // DI
+builder.Services.AddScoped<IKpiRepository, KpiRepository>();
+builder.Services.AddScoped<IWorkingCalendarService, WorkingCalendarService>();
+builder.Services.AddScoped<IKpiCalculationService, KpiCalculationService>();
 builder.Services.AddScoped<IDebtDocumentRepository, DebtDocumentRepository>();
 builder.Services.AddScoped<IDepartmentRepository, DepartmentRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();

@@ -83,7 +83,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "admin@vcb.com",
                             IsActive = true,
                             Name = "Quản trị viên",
-                            PasswordHash = "$2a$11$TfrXeERMeKnlCrMXlLX7huJ3eaMhzPUTFzqNi6kZjnpuoSM5LhTdy",
+                            PasswordHash = "$2a$11$uMYcfWagO9pYps9VizNks.PKp7nOo6PAjrtxGgQME4Dwaz2hQMGiS",
                             Role = "admin"
                         },
                         new
@@ -94,7 +94,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "nv.pkh@vcb.com",
                             IsActive = true,
                             Name = "Nguyễn Văn Khách Hàng (NV)",
-                            PasswordHash = "$2a$11$0oot4Kit9cXWfhPgEBQREuCN0/dBEZ4bIatZ6Bd06/li7gNUjBwR6",
+                            PasswordHash = "$2a$11$oAvdA68ImpohZPjsUktc2e9DPZ70Q3ekivQi60v4Ta4iG06/EF9/e",
                             Role = "staff"
                         },
                         new
@@ -105,7 +105,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "sup.pkh@vcb.com",
                             IsActive = true,
                             Name = "Trần Trưởng Phòng KH (SUP)",
-                            PasswordHash = "$2a$11$hhNeG1e2wTVY229bp53MUucIuq8S3U3oFNNviqn/l/SGWNBmrbGQa",
+                            PasswordHash = "$2a$11$W6IDQLB6rRXwsRJGnqjgiOLygrqqAtdgC6BXIxXIknXyZY50E1uKm",
                             Role = "manager"
                         },
                         new
@@ -116,7 +116,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "nv.pqln@vcb.com",
                             IsActive = true,
                             Name = "Lê Quản Lý Nợ (NV)",
-                            PasswordHash = "$2a$11$0oot4Kit9cXWfhPgEBQREuCN0/dBEZ4bIatZ6Bd06/li7gNUjBwR6",
+                            PasswordHash = "$2a$11$oAvdA68ImpohZPjsUktc2e9DPZ70Q3ekivQi60v4Ta4iG06/EF9/e",
                             Role = "staff"
                         },
                         new
@@ -127,7 +127,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "sup.pqln@vcb.com",
                             IsActive = true,
                             Name = "Phạm Trưởng Phòng QLN (SUP)",
-                            PasswordHash = "$2a$11$hhNeG1e2wTVY229bp53MUucIuq8S3U3oFNNviqn/l/SGWNBmrbGQa",
+                            PasswordHash = "$2a$11$W6IDQLB6rRXwsRJGnqjgiOLygrqqAtdgC6BXIxXIknXyZY50E1uKm",
                             Role = "manager"
                         },
                         new
@@ -138,7 +138,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "nv.pdv@vcb.com",
                             IsActive = true,
                             Name = "Hoàng Dịch Vụ KH (NV)",
-                            PasswordHash = "$2a$11$0oot4Kit9cXWfhPgEBQREuCN0/dBEZ4bIatZ6Bd06/li7gNUjBwR6",
+                            PasswordHash = "$2a$11$oAvdA68ImpohZPjsUktc2e9DPZ70Q3ekivQi60v4Ta4iG06/EF9/e",
                             Role = "staff"
                         },
                         new
@@ -149,7 +149,7 @@ namespace DebtManagement.Infrastructure.Migrations
                             Email = "sup.pdv@vcb.com",
                             IsActive = true,
                             Name = "Vũ Trưởng Phòng DVKH (SUP)",
-                            PasswordHash = "$2a$11$hhNeG1e2wTVY229bp53MUucIuq8S3U3oFNNviqn/l/SGWNBmrbGQa",
+                            PasswordHash = "$2a$11$W6IDQLB6rRXwsRJGnqjgiOLygrqqAtdgC6BXIxXIknXyZY50E1uKm",
                             Role = "manager"
                         });
                 });
@@ -602,6 +602,280 @@ namespace DebtManagement.Infrastructure.Migrations
                     b.ToTable("document_edit_logs", (string)null);
                 });
 
+            modelBuilder.Entity("DebtManagement.Domain.Entities.KpiConfig", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CompletionMilestoneType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("completion_milestone_type");
+
+                    b.Property<int>("DelayCycleDays")
+                        .HasColumnType("int")
+                        .HasColumnName("delay_cycle_days");
+
+                    b.Property<decimal>("DelayPenaltyRate")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("delay_penalty_rate");
+
+                    b.Property<string>("DelayRoundingMode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("delay_rounding_mode");
+
+                    b.Property<int>("DirectPdvTotalSlaDays")
+                        .HasColumnType("int")
+                        .HasColumnName("direct_pdv_total_sla_days");
+
+                    b.Property<DateOnly>("EffectiveFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_from");
+
+                    b.Property<decimal>("MonthlyMaxCountPenalty")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("monthly_max_count_penalty");
+
+                    b.Property<int>("SlaPdvDays")
+                        .HasColumnType("int")
+                        .HasColumnName("sla_pdv_days");
+
+                    b.Property<int>("SlaPkhDays")
+                        .HasColumnType("int")
+                        .HasColumnName("sla_pkh_days");
+
+                    b.Property<int>("SlaPqlnDays")
+                        .HasColumnType("int")
+                        .HasColumnName("sla_pqln_days");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("kpi_configs", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000100"),
+                            CompletionMilestoneType = "CompletedAt",
+                            DelayCycleDays = 5,
+                            DelayPenaltyRate = 0.01m,
+                            DelayRoundingMode = "Linear",
+                            DirectPdvTotalSlaDays = 9,
+                            EffectiveFrom = new DateOnly(2026, 9, 1),
+                            MonthlyMaxCountPenalty = 0.25m,
+                            SlaPdvDays = 3,
+                            SlaPkhDays = 6,
+                            SlaPqlnDays = 3,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        });
+                });
+
+            modelBuilder.Entity("DebtManagement.Domain.Entities.KpiPeriod", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CalculatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("calculated_at");
+
+                    b.Property<DateOnly>("CutoffDate")
+                        .HasColumnType("date")
+                        .HasColumnName("cutoff_date");
+
+                    b.Property<DateTime?>("FinalizedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("finalized_at");
+
+                    b.Property<Guid?>("FinalizedByUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("finalized_by_user_id");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("int")
+                        .HasColumnName("month");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("WorkingDaysInMonth")
+                        .HasColumnType("int")
+                        .HasColumnName("working_days_in_month");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("int")
+                        .HasColumnName("year");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Year", "Month")
+                        .IsUnique();
+
+                    b.ToTable("kpi_periods", (string)null);
+                });
+
+            modelBuilder.Entity("DebtManagement.Domain.Entities.KpiViolationItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<DateOnly?>("ActualCompletedDate")
+                        .HasColumnType("date")
+                        .HasColumnName("actual_completed_date");
+
+                    b.Property<string>("AdminNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("admin_note");
+
+                    b.Property<string>("AutoSuggestedDepartmentCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("auto_suggested_department_code");
+
+                    b.Property<string>("CustomerName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("customer_name");
+
+                    b.Property<Guid>("DebtDocumentId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("debt_document_id");
+
+                    b.Property<Guid?>("DebtItemId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("debt_item_id");
+
+                    b.Property<int>("DelayWorkingDays")
+                        .HasColumnType("int")
+                        .HasColumnName("delay_working_days");
+
+                    b.Property<string>("DocumentNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("document_number");
+
+                    b.Property<string>("FinalDepartmentCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("final_department_code");
+
+                    b.Property<bool>("IsCarriedOver")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("is_carried_over");
+
+                    b.Property<bool>("IsExcluded")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("is_excluded");
+
+                    b.Property<DateOnly>("IssueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("issue_date");
+
+                    b.Property<string>("ItemName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("item_name");
+
+                    b.Property<Guid>("KpiPeriodId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("kpi_period_id");
+
+                    b.Property<string>("OverrideDepartmentCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("override_department_code");
+
+                    b.Property<int>("PdvDays")
+                        .HasColumnType("int")
+                        .HasColumnName("pdv_days");
+
+                    b.Property<int>("PkhDays")
+                        .HasColumnType("int")
+                        .HasColumnName("pkh_days");
+
+                    b.Property<int>("PqlnDays")
+                        .HasColumnType("int")
+                        .HasColumnName("pqln_days");
+
+                    b.Property<DateOnly>("SlaDueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("sla_due_date");
+
+                    b.Property<string>("WorkflowType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("workflow_type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KpiPeriodId");
+
+                    b.ToTable("kpi_violation_items", (string)null);
+                });
+
+            modelBuilder.Entity("DebtManagement.Domain.Entities.WorkCalendarHoliday", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("description");
+
+                    b.Property<DateOnly>("HolidayDate")
+                        .HasColumnType("date")
+                        .HasColumnName("holiday_date");
+
+                    b.Property<bool>("IsWorkingDay")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("is_working_day");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HolidayDate")
+                        .IsUnique();
+
+                    b.ToTable("work_calendar_holidays", (string)null);
+                });
+
             modelBuilder.Entity("DebtManagement.Domain.Entities.AppUser", b =>
                 {
                     b.HasOne("DebtManagement.Domain.Entities.Department", "Department")
@@ -735,6 +1009,17 @@ namespace DebtManagement.Infrastructure.Migrations
                     b.Navigation("EditedByUser");
                 });
 
+            modelBuilder.Entity("DebtManagement.Domain.Entities.KpiViolationItem", b =>
+                {
+                    b.HasOne("DebtManagement.Domain.Entities.KpiPeriod", "KpiPeriod")
+                        .WithMany("Violations")
+                        .HasForeignKey("KpiPeriodId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("KpiPeriod");
+                });
+
             modelBuilder.Entity("DebtManagement.Domain.Entities.DebtDocument", b =>
                 {
                     b.Navigation("DebtItems");
@@ -747,6 +1032,11 @@ namespace DebtManagement.Infrastructure.Migrations
             modelBuilder.Entity("DebtManagement.Domain.Entities.Department", b =>
                 {
                     b.Navigation("Users");
+                });
+
+            modelBuilder.Entity("DebtManagement.Domain.Entities.KpiPeriod", b =>
+                {
+                    b.Navigation("Violations");
                 });
 #pragma warning restore 612, 618
         }

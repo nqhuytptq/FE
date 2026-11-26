@@ -13,7 +13,10 @@ public class AppDbContext : DbContext
     public DbSet<CirculationHistory> CirculationHistory => Set<CirculationHistory>();
     public DbSet<DocumentEditLog> DocumentEditLogs => Set<DocumentEditLog>();
     public DbSet<DebtItem> DebtItems => Set<DebtItem>();
-
+    public DbSet<WorkCalendarHoliday> WorkCalendarHolidays => Set<WorkCalendarHoliday>();
+    public DbSet<KpiConfig> KpiConfigs => Set<KpiConfig>();
+    public DbSet<KpiPeriod> KpiPeriods => Set<KpiPeriod>();
+    public DbSet<KpiViolationItem> KpiViolationItems => Set<KpiViolationItem>();
     protected override void OnModelCreating(ModelBuilder mb)
     {
         mb.Entity<Department>(e =>
@@ -178,7 +181,78 @@ public class AppDbContext : DbContext
              .HasForeignKey(l => l.EditedByUserId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(l => l.DebtDocumentId);
         });
+            mb.Entity<WorkCalendarHoliday>(e =>
+        {
+            e.ToTable("work_calendar_holidays");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.HolidayDate).HasColumnName("holiday_date");
+            e.Property(x => x.IsWorkingDay).HasColumnName("is_working_day");
+            e.Property(x => x.Description).HasColumnName("description").HasMaxLength(255);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.HasIndex(x => x.HolidayDate).IsUnique();
+        });
 
+        mb.Entity<KpiConfig>(e =>
+        {
+            e.ToTable("kpi_configs");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.EffectiveFrom).HasColumnName("effective_from");
+            e.Property(x => x.MonthlyMaxCountPenalty).HasColumnName("monthly_max_count_penalty").HasPrecision(10, 4);
+            e.Property(x => x.DelayPenaltyRate).HasColumnName("delay_penalty_rate").HasPrecision(10, 4);
+            e.Property(x => x.DelayCycleDays).HasColumnName("delay_cycle_days");
+            e.Property(x => x.DelayRoundingMode).HasColumnName("delay_rounding_mode").HasMaxLength(20);
+            e.Property(x => x.CompletionMilestoneType).HasColumnName("completion_milestone_type").HasMaxLength(30);
+            e.Property(x => x.SlaPkhDays).HasColumnName("sla_pkh_days");
+            e.Property(x => x.SlaPqlnDays).HasColumnName("sla_pqln_days");
+            e.Property(x => x.SlaPdvDays).HasColumnName("sla_pdv_days");
+            e.Property(x => x.DirectPdvTotalSlaDays).HasColumnName("direct_pdv_total_sla_days");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+        });
+
+        mb.Entity<KpiPeriod>(e =>
+        {
+            e.ToTable("kpi_periods");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Year).HasColumnName("year");
+            e.Property(x => x.Month).HasColumnName("month");
+            e.Property(x => x.WorkingDaysInMonth).HasColumnName("working_days_in_month");
+            e.Property(x => x.CutoffDate).HasColumnName("cutoff_date");
+            e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20);
+            e.Property(x => x.CalculatedAt).HasColumnName("calculated_at");
+            e.Property(x => x.FinalizedAt).HasColumnName("finalized_at");
+            e.Property(x => x.FinalizedByUserId).HasColumnName("finalized_by_user_id");
+            e.Property(x => x.Notes).HasColumnName("notes").HasMaxLength(1000);
+            e.HasIndex(x => new { x.Year, x.Month }).IsUnique();
+        });
+
+        mb.Entity<KpiViolationItem>(e =>
+        {
+            e.ToTable("kpi_violation_items");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.KpiPeriodId).HasColumnName("kpi_period_id");
+            e.Property(x => x.DebtDocumentId).HasColumnName("debt_document_id");
+            e.Property(x => x.DebtItemId).HasColumnName("debt_item_id");
+            e.Property(x => x.DocumentNumber).HasColumnName("document_number").HasMaxLength(50);
+            e.Property(x => x.CustomerName).HasColumnName("customer_name").HasMaxLength(200);
+            e.Property(x => x.ItemName).HasColumnName("item_name").HasMaxLength(255);
+            e.Property(x => x.WorkflowType).HasColumnName("workflow_type").HasMaxLength(30);
+            e.Property(x => x.IssueDate).HasColumnName("issue_date");
+            e.Property(x => x.SlaDueDate).HasColumnName("sla_due_date");
+            e.Property(x => x.ActualCompletedDate).HasColumnName("actual_completed_date");
+            e.Property(x => x.PkhDays).HasColumnName("pkh_days");
+            e.Property(x => x.PqlnDays).HasColumnName("pqln_days");
+            e.Property(x => x.PdvDays).HasColumnName("pdv_days");
+            e.Property(x => x.DelayWorkingDays).HasColumnName("delay_working_days");
+            e.Property(x => x.IsCarriedOver).HasColumnName("is_carried_over");
+            e.Property(x => x.AutoSuggestedDepartmentCode).HasColumnName("auto_suggested_department_code").HasMaxLength(20);
+            e.Property(x => x.OverrideDepartmentCode).HasColumnName("override_department_code").HasMaxLength(20);
+            e.Property(x => x.FinalDepartmentCode).HasColumnName("final_department_code").HasMaxLength(20);
+            e.Property(x => x.IsExcluded).HasColumnName("is_excluded");
+            e.Property(x => x.AdminNote).HasColumnName("admin_note").HasMaxLength(1000);
+            e.HasOne(x => x.KpiPeriod).WithMany(p => p.Violations)
+             .HasForeignKey(x => x.KpiPeriodId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.KpiPeriodId);
+        });
         ConfigureSeedData(mb);
     }
 
@@ -188,7 +262,21 @@ public class AppDbContext : DbContext
         var pqlnId = Guid.Parse("00000000-0000-0000-0000-000000000002");
         var pdvId = Guid.Parse("00000000-0000-0000-0000-000000000003");
         var epoch = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-
+        mb.Entity<KpiConfig>().HasData(new KpiConfig
+        {
+            Id = Guid.Parse("00000000-0000-0000-0000-000000000100"),
+            EffectiveFrom = new DateOnly(2026, 9, 1),
+            MonthlyMaxCountPenalty = 0.25m,
+            DelayPenaltyRate = 0.01m,
+            DelayCycleDays = 5,
+            DelayRoundingMode = "Linear",
+            CompletionMilestoneType = "CompletedAt",
+            SlaPkhDays = 6,
+            SlaPqlnDays = 3,
+            SlaPdvDays = 3,
+            DirectPdvTotalSlaDays = 9,
+            UpdatedAt = epoch
+        });
         mb.Entity<Department>().HasData(
             new Department { Id = pkhId, Name = "Phòng Khách hàng", Code = "PKH", Description = "Tiếp nhận và khởi tạo hồ sơ văn bản nợ", SortOrder = 1, CreatedAt = epoch },
             new Department { Id = pqlnId, Name = "Phòng Quản lý nợ", Code = "PQLN", Description = "Thẩm định, tiếp nhận và kiểm soát chứng từ nợ", SortOrder = 2, CreatedAt = epoch },

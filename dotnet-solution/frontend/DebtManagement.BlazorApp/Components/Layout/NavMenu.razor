@@ -1,4 +1,6 @@
-﻿@inject BlazorSession Session
+﻿@using DebtManagement.Shared.Constants
+@implements IDisposable
+@inject BlazorSession Session
 
 <aside class="vcb-sidebar">
     <div class="vcb-brand">
@@ -14,10 +16,20 @@
             <span>📁</span>
             <span>Hồ sơ văn bản nợ</span>
         </NavLink>
-        <a class="vcb-nav-item" href="javascript:void(0)" title="Đang phát triển">
-            <span>📊</span>
-            <span>Báo cáo</span>
-        </a>
+        @if (string.Equals(Session.CurrentUser?.Role, WorkflowConstants.RoleAdmin, StringComparison.OrdinalIgnoreCase))
+        {
+            <NavLink class="vcb-nav-item" href="kpi-admin">
+                <span>📊</span>
+                <span>Chấm điểm KPI</span>
+            </NavLink>
+        }
+        else
+        {
+            <a class="vcb-nav-item" href="javascript:void(0)" title="Đang phát triển">
+                <span>📊</span>
+                <span>Báo cáo</span>
+            </a>
+        }
         <a class="vcb-nav-item" href="javascript:void(0)" title="Đang phát triển">
             <span>⚙️</span>
             <span>Cài đặt</span>
@@ -28,3 +40,20 @@
         Vietcombank · Nội bộ
     </div>
 </aside>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Session.OnChange += HandleSessionChanged;
+    }
+
+    private void HandleSessionChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Session.OnChange -= HandleSessionChanged;
+    }
+}
