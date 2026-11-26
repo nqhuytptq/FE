@@ -120,6 +120,7 @@ public class AppDbContext : DbContext
             e.Property(i => i.PdvVerifiedByUserId).HasColumnName("pdv_verified_by_user_id");
             e.Property(i => i.Notes).HasColumnName("notes").HasMaxLength(1000);
             e.Property(i => i.SourceDepartmentId).HasColumnName("source_department_id");
+            e.Property(i => i.TargetDepartmentId).HasColumnName("target_department_id");
             e.Property(i => i.CreatedByUserId).HasColumnName("created_by_user_id");
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.HasOne(i => i.DebtDocument).WithMany(d => d.DebtItems)
@@ -137,6 +138,8 @@ public class AppDbContext : DbContext
              .HasForeignKey(i => i.PdvVerifiedByUserId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(i => i.SourceDepartment).WithMany()
              .HasForeignKey(i => i.SourceDepartmentId).OnDelete(DeleteBehavior.SetNull);
+             e.HasOne(i => i.TargetDepartment).WithMany()
+             .HasForeignKey(i => i.TargetDepartmentId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(i => i.CreatedByUser).WithMany()
              .HasForeignKey(i => i.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(i => i.DebtDocumentId);

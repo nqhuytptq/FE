@@ -10,11 +10,32 @@ public static class WorkflowConstants
     public const string CustomerCompany = "company";
     public const string CustomerIndividual = "individual";
 
-    // Mã phòng ban
+    // Mã phòng ban (nhóm luồng & phòng nghiệp vụ)
     public const string DeptPkh = "PKH";
     public const string DeptPqln = "PQLN";
     public const string DeptPdv = "PDV";
     public const string DeptPkt = "PKT";
+
+    // Mã 4 phòng bán hàng thực tế
+    public const string DeptKhdn = "KHDN";
+    public const string DeptKhbl = "KHBL";
+    public const string DeptPgdLlq = "PGD_LLQ";
+    public const string DeptPgdCd = "PGD_CD";
+
+    public static readonly HashSet<string> SalesDepartmentCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        DeptKhdn,
+        DeptKhbl,
+        DeptPgdLlq,
+        DeptPgdCd,
+        DeptPkh // Giữ lại PKH để tương thích dữ liệu lịch sử
+    };
+
+    public static bool IsSalesDept(string? deptCode)
+        => !string.IsNullOrWhiteSpace(deptCode) && SalesDepartmentCodes.Contains(deptCode.Trim());
+
+    public static string GetWorkflowGroup(string? deptCode)
+        => IsSalesDept(deptCode) ? DeptPkh : (deptCode?.Trim().ToUpperInvariant() ?? "");
 
     // Vai trò người dùng
     public const string RoleAdmin = "admin";

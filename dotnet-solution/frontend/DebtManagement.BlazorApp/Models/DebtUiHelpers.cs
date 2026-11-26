@@ -76,7 +76,7 @@ public static class DebtUiHelpers
         StatusNames.PdvPendingReceive => "Chờ PDV nhận",
         StatusNames.PdvReceived => "PDV tiếp nhận",
         StatusNames.PdvEntryPosted => "Chờ SUP PDV duyệt",
-        StatusNames.PdvEntryApproved => "Chờ bổ sung CT",
+        StatusNames.PdvEntryApproved => "Đã duyệt BT · Chờ CT",
         StatusNames.ReturnedToPkh => "Trả về PKH",
         StatusNames.ReturnedToPqln => "Trả về PQLN",
         StatusNames.Completed => "Hoàn tất",
@@ -95,18 +95,22 @@ public static class DebtUiHelpers
         StatusNames.Completed => $"Hoàn tất ({d.PdvReceiverName ?? d.CreatedByUserName})",
         _ => d.CreatedByUserName ?? "—"
     };
+
+    public static string GetItemTargetDeptCode(DebtItemDto x, bool isDirectPdv)
+    {
+        if (!string.IsNullOrWhiteSpace(x.TargetDepartmentCode))
+            return x.TargetDepartmentCode.Trim().ToUpperInvariant();
+        if (isDirectPdv || string.Equals(x.SourceDepartmentCode, DeptPqln, StringComparison.OrdinalIgnoreCase))
+            return DeptPdv;
+        return DeptPqln;
+    }
+
     public static bool IsItemFullyCompleted(DebtItemDto x, bool isDirectPdv)
     {
         if (!x.IsSupplemented) return false;
-        if (isDirectPdv) return x.IsVerifiedByPdv;
-
-        var deptCode = x.SourceDepartmentCode ?? DeptPkh;
-        return deptCode switch
-        {
-            DeptPkh => x.IsVerifiedByPqln,
-            DeptPqln => x.IsVerifiedByPdv,
-            _ => true
-        };
+        return GetItemTargetDeptCode(x, isDirectPdv) == DeptPdv
+            ? x.IsVerifiedByPdv
+            : x.IsVerifiedByPqln;
     }
 
     public static bool IsActionRequiredForUser(DebtDocumentDto d, Guid? userId, string? deptCode, string? role)
@@ -121,9 +125,7 @@ public static class DebtUiHelpers
             if (deptCode == DeptPkh && d.Status == StatusNames.PkhPendingSup) return "Duyệt PKH";
             if (deptCode == DeptPqln && d.WorkflowType != WorkflowDirectPdv && d.Status == StatusNames.PqlnPendingSup) return "Duyệt PQLN";
             if (deptCode == DeptPdv && d.Status == StatusNames.PdvEntryPosted)
-                return d.TotalDebtItems > d.SupplementedDebtItems ? "Duyệt bút toán" : "Duyệt hoàn tất";
-            if (deptCode == DeptPdv && d.Status == StatusNames.PdvEntryApproved && d.TotalDebtItems <= d.SupplementedDebtItems)
-                return "Duyệt hoàn tất";
+                return d.TotalDebtItems > d.SupplementedDebtItems ? "Duyệt bút toán" : "Duyệt BT & hoàn tất";
             return null;
         }
 

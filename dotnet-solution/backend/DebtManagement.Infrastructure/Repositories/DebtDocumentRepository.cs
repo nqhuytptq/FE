@@ -14,6 +14,7 @@ public class DebtDocumentRepository(AppDbContext db) : IDebtDocumentRepository
         .Include(d => d.PdvReceiver)
         .Include(d => d.DebtItems).ThenInclude(i => i.SupplementedByUser)
         .Include(d => d.DebtItems).ThenInclude(i => i.SourceDepartment)
+        .Include(d => d.DebtItems).ThenInclude(i => i.TargetDepartment)
         .Include(d => d.DebtItems).ThenInclude(i => i.CreatedByUser);
 
     public async Task<IReadOnlyList<DebtDocument>> GetAllAsync(
@@ -28,7 +29,8 @@ public class DebtDocumentRepository(AppDbContext db) : IDebtDocumentRepository
             q = q.Where(d => d.CustomerName.Contains(search) || d.DocumentNumber.Contains(search));
         return await q.OrderByDescending(d => d.CreatedAt).ToListAsync();
     }
-    public async Task<bool> TryTakePqlnOwnershipAsync(Guid id, Guid staffUserId, DateTime receivedAt)
+
+   public async Task<bool> TryTakePqlnOwnershipAsync(Guid id, Guid staffUserId, DateTime receivedAt)
     {
         var affected = await db.DebtDocuments
             .Where(d => d.Id == id
@@ -40,8 +42,20 @@ public class DebtDocumentRepository(AppDbContext db) : IDebtDocumentRepository
                 .SetProperty(d => d.Status, DocumentStatus.PqlnReceived)
                 .SetProperty(d => d.UpdatedAt, receivedAt));
 
+        if (affected > 0)
+        {
+            var tracked = db.ChangeTracker.Entries<DebtDocument>()
+                .FirstOrDefault(e => e.Entity.Id == id);
+            if (tracked != null)
+            {
+                await tracked.ReloadAsync();
+                await tracked.Reference(d => d.PqlnReceiver).LoadAsync();
+            }
+        }
+
         return affected > 0;
     }
+
     public async Task<bool> TryTakePdvOwnershipAsync(Guid id, Guid staffUserId, DateTime receivedAt)
     {
         var affected = await db.DebtDocuments
@@ -54,8 +68,20 @@ public class DebtDocumentRepository(AppDbContext db) : IDebtDocumentRepository
                 .SetProperty(d => d.Status, DocumentStatus.PdvReceived)
                 .SetProperty(d => d.UpdatedAt, receivedAt));
 
+        if (affected > 0)
+        {
+            var tracked = db.ChangeTracker.Entries<DebtDocument>()
+                .FirstOrDefault(e => e.Entity.Id == id);
+            if (tracked != null)
+            {
+                await tracked.ReloadAsync();
+                await tracked.Reference(d => d.PdvReceiver).LoadAsync();
+            }
+        }
+
         return affected > 0;
     }
+
     public async Task<DebtDocument?> GetByIdAsync(Guid id)
         => await Base(db).FirstOrDefaultAsync(d => d.Id == id);
 
@@ -82,6 +108,7 @@ public class DebtDocumentRepository(AppDbContext db) : IDebtDocumentRepository
         => await db.DebtItems
             .Include(i => i.SupplementedByUser)
             .Include(i => i.SourceDepartment)
+            .Include(i => i.TargetDepartment)
             .Include(i => i.CreatedByUser)
             .Where(i => i.DebtDocumentId == documentId)
             .ToListAsync();

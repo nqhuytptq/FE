@@ -35,12 +35,12 @@
             <div class="d-flex flex-wrap gap-2">
                 <button type="button"
                         class="btn btn-sm px-3 fw-semibold rounded-3 @(newWorkflowType == "pkh_pqln_pdv" ? "btn-success" : "btn-outline-secondary")"
-                        @onclick='() => newWorkflowType = "pkh_pqln_pdv"'>
+                        @onclick='() => SetWorkflowType("pkh_pqln_pdv")'>
                     🔁 Tiêu chuẩn (PKH → PQLN → PDV)
                 </button>
                 <button type="button"
                         class="btn btn-sm px-3 fw-semibold rounded-3 @(newWorkflowType == "pkh_pdv" ? "btn-primary" : "btn-outline-secondary")"
-                        @onclick='() => newWorkflowType = "pkh_pdv"'>
+                        @onclick='() => SetWorkflowType("pkh_pdv")'>
                     ⚡ Chuyển thẳng PDV (PKH → PDV)
                 </button>
             </div>
@@ -77,12 +77,24 @@
     {
         @foreach (var it in newItems)
         {
-            <div class="input-group input-group-sm mb-2" style="max-width: 520px;">
+            <div class="input-group input-group-sm mb-2" style="max-width: 680px;">
                 <input class="form-control" @bind="it.ItemName" placeholder="Nhập tên chứng từ nợ..." />
-                <button class="btn btn-outline-danger" @onclick="() => newItems.Remove(it)">Xóa</button>
+                @if (newWorkflowType == "pkh_pqln_pdv")
+                {
+                    <span class="input-group-text bg-light text-muted">Nợ phòng</span>
+                    <select class="form-select" style="max-width: 120px; font-weight: 600;" @bind="it.TargetDepartmentCode">
+                        <option value="PQLN">PQLN</option>
+                        <option value="PDV">PDV</option>
+                    </select>
+                }
+                else
+                {
+                    <span class="input-group-text bg-primary-subtle text-primary fw-semibold">Nợ PDV</span>
+                }
+                <button type="button" class="btn btn-outline-danger" @onclick="() => newItems.Remove(it)">Xóa</button>
             </div>
         }
-        <button class="btn btn-sm btn-outline-success mb-2" @onclick="() => newItems.Add(new CreateDebtItemRequest())">+ Thêm chứng từ nợ</button>
+        <button type="button" class="btn btn-sm btn-outline-success mb-2" @onclick="AddDebtItemRow">+ Thêm chứng từ nợ</button>
     }
     <div class="mt-2 d-flex gap-2">
         <button class="vcb-btn-primary px-4" style="height: 38px;" @onclick="CreateDocAsync">Lưu & Gửi SUP PKH</button>
@@ -103,6 +115,23 @@
     bool newHasDebt;
     List<CreateDebtItemRequest> newItems = new();
     string? createError;
+
+    void SetWorkflowType(string wf)
+    {
+        newWorkflowType = wf;
+        foreach (var it in newItems)
+        {
+            it.TargetDepartmentCode = wf == "pkh_pdv" ? "PDV" : (it.TargetDepartmentCode ?? "PQLN");
+        }
+    }
+
+    void AddDebtItemRow()
+    {
+        newItems.Add(new CreateDebtItemRequest
+        {
+            TargetDepartmentCode = newWorkflowType == "pkh_pdv" ? "PDV" : "PQLN"
+        });
+    }
 
     async Task CreateDocAsync()
     {

@@ -11,10 +11,41 @@ public class DebtItemVerificationService(
     IUserRepository users,
     IDocumentAuditService audit) : IDebtItemVerificationService
 {
+    private async Task TryAutoCompleteDocumentAsync(DebtDocument d, Guid actorUserId, string actorDeptCode, DateTime completedAt)
+    {
+        if (d.Status != DocumentStatus.PdvEntryApproved)
+            return;
+
+        var pkh = await departments.GetByCodeAsync("PKH");
+        var pqln = await departments.GetByCodeAsync("PQLN");
+        var pdv = await departments.GetByCodeAsync("PDV");
+
+        var latestItems = await docs.GetDebtItemsAsync(d.Id);
+        var allCompleted = latestItems.All(x => IsItemCompleted(x, d.WorkflowType, pkh?.Id, pqln?.Id, pdv?.Id));
+        if (!allCompleted)
+            return;
+
+        d.Status = DocumentStatus.Completed;
+        d.CompletedAt = completedAt;
+        d.CompletedByUserId = actorUserId;
+        await docs.UpdateAsync(d);
+
+        await audit.AddHistoryAsync(
+            d.Id,
+            d.CurrentDepartmentId,
+            d.CurrentDepartmentId,
+            CirculationAction.Completed,
+            DocumentStatus.Completed,
+            actorUserId,
+            $"Tự động hoàn tất hồ sơ: Toàn bộ chứng từ nợ đã được bổ sung và xác nhận đủ (xác nhận cuối bởi NV {actorDeptCode})");
+    }
+
     public async Task AddDebtItemsAsync(Guid id, AddDebtItemsRequest r, Guid u)
     {
         var (user, dept) = await GetActorAsync(users, departments, u);
         var d = await docs.GetDetailByIdAsync(id) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
+        var pqln = await departments.GetByCodeAsync("PQLN");
+        var pdv = await departments.GetByCodeAsync("PDV");
 
         var isStaff = user.Role == "staff";
         var canAdd = dept?.Code switch
@@ -36,13 +67,21 @@ public class DebtItemVerificationService(
 
         var items = (r.Items ?? [])
             .Where(x => !string.IsNullOrWhiteSpace(x.ItemName))
-            .Select(x => new DebtItem
+            .Select(x =>
             {
-                DebtDocumentId = id,
-                ItemName = x.ItemName.Trim(),
-                Notes = x.Notes,
-                SourceDepartmentId = dept.Id,
-                CreatedByUserId = u
+                var targetCode = dept.Code == "PQLN"
+                    ? "PDV"
+                    : NormalizeTargetDeptCode(x.TargetDepartmentCode, d.WorkflowType);
+                var targetDeptId = targetCode == "PDV" ? pdv?.Id : pqln?.Id;
+                return new DebtItem
+                {
+                    DebtDocumentId = id,
+                    ItemName = x.ItemName.Trim(),
+                    Notes = x.Notes,
+                    SourceDepartmentId = dept.Id,
+                    TargetDepartmentId = targetDeptId,
+                    CreatedByUserId = u
+                };
             }).ToList();
 
         if (items.Count == 0) throw new InvalidOperationException("Vui lòng nhập ít nhất một chứng từ");
@@ -51,7 +90,11 @@ public class DebtItemVerificationService(
         d.HasDebtDocuments = true;
         await docs.UpdateAsync(d);
 
-        var itemsText = string.Join(", ", items.Select(x => x.ItemName));
+        var itemsText = string.Join(", ", items.Select(x =>
+        {
+            var tCode = x.TargetDepartmentId == pdv?.Id ? "PDV" : "PQLN";
+            return $"{x.ItemName} [Nợ {tCode}]";
+        }));
         var isGenericNote = string.IsNullOrWhiteSpace(r.Notes)
             || r.Notes.Trim().StartsWith("Thêm chứng từ nợ tại", StringComparison.OrdinalIgnoreCase);
 
@@ -62,7 +105,7 @@ public class DebtItemVerificationService(
         await audit.AddHistoryAsync(id, d.CurrentDepartmentId, d.CurrentDepartmentId, CirculationAction.Supplemented, d.Status, u, note);
     }
 
-    private async Task<(DebtDocument Document, DebtItem Item)> GetEditableItemAsync(Guid documentId, Guid itemId, Guid userId)
+    private async Task<(DebtDocument Document, DebtItem Item, Department ActorDept)> GetEditableItemAsync(Guid documentId, Guid itemId, Guid userId)
     {
         var (user, dept) = await GetActorAsync(users, departments, userId);
         var document = await docs.GetDetailByIdAsync(documentId)
@@ -79,7 +122,7 @@ public class DebtItemVerificationService(
             "PKH" => isStaff
                      && document.Status is DocumentStatus.PkhPendingSup or DocumentStatus.ReturnedToPkh
                      && document.CreatedByUserId == userId
-                     && item.SourceDepartmentId == dept.Id,
+                     && (item.SourceDepartmentId == dept.Id || item.SourceDepartmentId == null),
 
             "PQLN" => isStaff
                       && NormalizeWorkflowType(document.WorkflowType) == WorkflowStandard
@@ -90,10 +133,10 @@ public class DebtItemVerificationService(
             _ => false
         };
 
-        if (!allowed)
+        if (!allowed || dept == null)
             throw new UnauthorizedAccessException("Bạn không có quyền sửa/xóa chứng từ nợ ở trạng thái hiện tại của hồ sơ");
 
-        return (document, item);
+        return (document, item, dept);
     }
 
     public async Task UpdateDebtItemAsync(Guid documentId, Guid itemId, UpdateDebtItemRequest request, Guid userId)
@@ -101,10 +144,22 @@ public class DebtItemVerificationService(
         if (string.IsNullOrWhiteSpace(request.ItemName))
             throw new InvalidOperationException("Tên chứng từ không được để trống");
 
-        var (document, item) = await GetEditableItemAsync(documentId, itemId, userId);
+        var (document, item, dept) = await GetEditableItemAsync(documentId, itemId, userId);
+        var pqln = await departments.GetByCodeAsync("PQLN");
+        var pdv = await departments.GetByCodeAsync("PDV");
+
         var oldName = item.ItemName;
         item.ItemName = request.ItemName.Trim();
         item.Notes = request.Notes;
+
+        if (!string.IsNullOrWhiteSpace(request.TargetDepartmentCode))
+        {
+            var targetCode = dept.Code == "PQLN"
+                ? "PDV"
+                : NormalizeTargetDeptCode(request.TargetDepartmentCode, document.WorkflowType);
+            item.TargetDepartmentId = targetCode == "PDV" ? pdv?.Id : pqln?.Id;
+        }
+
         await docs.UpdateDebtItemAsync(item);
 
         await audit.AddHistoryAsync(document.Id, document.CurrentDepartmentId, document.CurrentDepartmentId,
@@ -113,7 +168,7 @@ public class DebtItemVerificationService(
 
     public async Task DeleteDebtItemAsync(Guid documentId, Guid itemId, Guid userId)
     {
-        var (document, item) = await GetEditableItemAsync(documentId, itemId, userId);
+        var (document, item, dept) = await GetEditableItemAsync(documentId, itemId, userId);
         await docs.DeleteDebtItemAsync(itemId);
 
         if (!document.DebtItems.Any(x => x.Id != itemId))
@@ -124,6 +179,8 @@ public class DebtItemVerificationService(
 
         await audit.AddHistoryAsync(document.Id, document.CurrentDepartmentId, document.CurrentDepartmentId,
             CirculationAction.Supplemented, document.Status, userId, $"Xóa chứng từ nợ: {item.ItemName}");
+
+        await TryAutoCompleteDocumentAsync(document, userId, dept.Code, DateTime.UtcNow);
     }
 
     public async Task SupplementItemsAsync(Guid id, SupplementItemsRequest r, Guid u)
@@ -186,28 +243,20 @@ public class DebtItemVerificationService(
     public async Task VerifySupplementItemsAsync(Guid id, VerifySupplementItemsRequest r, Guid u)
     {
         var (user, dept) = await GetActorAsync(users, departments, u);
+        if (user.Role != "staff" || dept?.Code is not ("PQLN" or "PDV"))
+            throw new UnauthorizedAccessException("Chỉ nhân viên phòng PQLN hoặc PDV mới có quyền xác nhận chứng từ bổ sung.");
+
         var d = await docs.GetDetailByIdAsync(id)
             ?? throw new InvalidOperationException("Hồ sơ không tồn tại.");
 
-        var isDirectPdv = NormalizeWorkflowType(d.WorkflowType) == WorkflowDirectPdv;
+        if (dept.Code == "PQLN" && d.PqlnReceiverId != u)
+            throw new UnauthorizedAccessException("Chỉ cán bộ PQLN đang thụ lý hồ sơ này mới được xác nhận.");
+        if (dept.Code == "PDV" && d.PdvReceiverId != u)
+            throw new UnauthorizedAccessException("Chỉ cán bộ PDV đang thụ lý hồ sơ này mới được xác nhận.");
 
-        if (isDirectPdv)
-        {
-            if (dept?.Code != "PDV" || user.Role != "staff")
-                throw new UnauthorizedAccessException("Chỉ nhân viên phòng PDV mới có quyền xác nhận chứng từ bổ sung từ PKH cho luồng này.");
-            if (d.PdvReceiverId != u)
-                throw new UnauthorizedAccessException("Chỉ cán bộ PDV đang thụ lý hồ sơ này mới được xác nhận.");
-        }
-        else
-        {
-            if (dept?.Code != "PQLN" || user.Role != "staff")
-                throw new UnauthorizedAccessException("Chỉ nhân viên phòng PQLN mới có quyền xác nhận chứng từ bổ sung từ PKH.");
-            if (d.PqlnReceiverId != u)
-                throw new UnauthorizedAccessException("Chỉ cán bộ PQLN đang thụ lý hồ sơ này mới được xác nhận.");
-        }
-
-        var pkh = await departments.GetByCodeAsync("PKH")
-            ?? throw new InvalidOperationException("Không tìm thấy phòng ban PKH.");
+        var pkh = await departments.GetByCodeAsync("PKH");
+        var pqln = await departments.GetByCodeAsync("PQLN");
+        var pdv = await departments.GetByCodeAsync("PDV");
 
         var requestedIds = (r.ItemIds ?? []).Distinct().ToList();
         if (requestedIds.Count == 0)
@@ -215,17 +264,19 @@ public class DebtItemVerificationService(
 
         var targetItems = d.DebtItems.Where(x => requestedIds.Contains(x.Id)).ToList();
 
-        if (targetItems.Any(x => x.SourceDepartmentId != null && x.SourceDepartmentId != pkh.Id))
-            throw new InvalidOperationException("Chỉ thực hiện xác nhận đối với chứng từ nợ thuộc phòng PKH.");
+        if (targetItems.Any(x => GetTargetDepartmentCode(x, d.WorkflowType, pqln?.Id, pdv?.Id) != dept.Code))
+            throw new UnauthorizedAccessException($"Chứng từ đã chọn không thuộc danh sách nợ phòng {dept.Code}.");
 
         if (targetItems.Any(x => !x.IsSupplemented))
-            throw new InvalidOperationException("Không thể xác nhận chứng từ mà nhân viên PKH chưa tích bổ sung.");
+            throw new InvalidOperationException("Không thể xác nhận chứng từ khi phòng nợ chưa tích bổ sung.");
 
         var verifiedNames = new List<string>();
+        var sourceDepts = new HashSet<string>();
         var now = DateTime.UtcNow;
+
         foreach (var x in targetItems)
         {
-            if (isDirectPdv)
+            if (dept.Code == "PDV")
             {
                 if (x.IsVerifiedByPdv) continue;
                 x.IsVerifiedByPdv = true;
@@ -241,83 +292,43 @@ public class DebtItemVerificationService(
             }
             await docs.UpdateDebtItemAsync(x);
             verifiedNames.Add(x.ItemName);
+            sourceDepts.Add(GetSourceDepartmentCode(x, pkh?.Id, pqln?.Id));
         }
 
         if (verifiedNames.Count == 0)
             throw new InvalidOperationException("Các chứng từ đã chọn đều đã được xác nhận trước đó.");
 
         var itemsText = string.Join(", ", verifiedNames);
-        var verifierDeptCode = isDirectPdv ? "PDV" : "PQLN";
+        var fromLabel = string.Join("/", sourceDepts);
         var note = string.IsNullOrWhiteSpace(r.Notes)
-            ? $"NV {verifierDeptCode} xác nhận đã nhận chứng từ bổ sung từ PKH: {itemsText}"
+            ? $"NV {dept.Code} xác nhận đã nhận chứng từ bổ sung từ {fromLabel}: {itemsText}"
             : $"{r.Notes.Trim()} ({itemsText})";
 
         await audit.AddHistoryAsync(id, d.CurrentDepartmentId, d.CurrentDepartmentId, CirculationAction.Supplemented, d.Status, u, note);
+
+        // Nếu SUP PDV đã duyệt bút toán trước đó và toàn bộ chứng từ nợ đã hoàn tất -> Tự động chuyển sang Completed
+        await TryAutoCompleteDocumentAsync(d, u, dept.Code, now);
     }
 
-    public async Task VerifyPqlnSupplementItemsAsync(Guid id, VerifyPqlnSupplementItemsRequest r, Guid u)
-    {
-        var (user, dept) = await GetActorAsync(users, departments, u);
-        if (dept?.Code != "PDV" || user.Role != "staff")
-            throw new UnauthorizedAccessException("Chỉ nhân viên phòng PDV mới có quyền xác nhận chứng từ bổ sung từ PQLN.");
+    public Task VerifyPqlnSupplementItemsAsync(Guid id, VerifyPqlnSupplementItemsRequest r, Guid u)
+        => VerifySupplementItemsAsync(id, new VerifySupplementItemsRequest(r.ItemIds, r.Notes), u);
 
-        var d = await docs.GetDetailByIdAsync(id)
-            ?? throw new InvalidOperationException("Hồ sơ không tồn tại.");
-
-        if (NormalizeWorkflowType(d.WorkflowType) == WorkflowDirectPdv)
-            throw new InvalidOperationException("Hồ sơ luồng chuyển thẳng PDV không có chứng từ từ PQLN.");
-
-        if (d.PdvReceiverId != u)
-            throw new UnauthorizedAccessException("Chỉ cán bộ PDV đang thụ lý hồ sơ này mới được xác nhận.");
-
-        var pqln = await departments.GetByCodeAsync("PQLN")
-            ?? throw new InvalidOperationException("Không tìm thấy phòng ban PQLN.");
-
-        var requestedIds = (r.ItemIds ?? []).Distinct().ToList();
-        if (requestedIds.Count == 0)
-            throw new InvalidOperationException("Vui lòng chọn ít nhất một chứng từ để xác nhận.");
-
-        var targetItems = d.DebtItems.Where(x => requestedIds.Contains(x.Id)).ToList();
-
-        if (targetItems.Any(x => x.SourceDepartmentId != pqln.Id))
-            throw new InvalidOperationException("Chỉ thực hiện xác nhận đối với chứng từ nợ thuộc phòng PQLN.");
-
-        if (targetItems.Any(x => !x.IsSupplemented))
-            throw new InvalidOperationException("Không thể xác nhận chứng từ mà nhân viên PQLN chưa tích bổ sung.");
-
-        var verifiedNames = new List<string>();
-        var now = DateTime.UtcNow;
-        foreach (var x in targetItems)
-        {
-            if (x.IsVerifiedByPdv) continue;
-            x.IsVerifiedByPdv = true;
-            x.PdvVerifiedAt = now;
-            x.PdvVerifiedByUserId = u;
-            await docs.UpdateDebtItemAsync(x);
-            verifiedNames.Add(x.ItemName);
-        }
-
-        if (verifiedNames.Count == 0)
-            throw new InvalidOperationException("Các chứng từ đã chọn đều đã được xác nhận trước đó.");
-
-        var itemsText = string.Join(", ", verifiedNames);
-        var note = string.IsNullOrWhiteSpace(r.Notes)
-            ? $"NV PDV xác nhận đã nhận chứng từ bổ sung từ PQLN: {itemsText}"
-            : $"{r.Notes.Trim()} ({itemsText})";
-
-        await audit.AddHistoryAsync(id, d.CurrentDepartmentId, d.CurrentDepartmentId, CirculationAction.Supplemented, d.Status, u, note);
-    }
     public async Task RejectSupplementItemAsync(Guid documentId, Guid itemId, RejectSupplementItemRequest request, Guid userId)
     {
         if (string.IsNullOrWhiteSpace(request.Reason))
             throw new InvalidOperationException("Vui lòng nhập lý do từ chối chứng từ bổ sung.");
 
         var (user, dept) = await GetActorAsync(users, departments, userId);
-        if (user.Role != "staff" || dept == null)
+        if (user.Role != "staff" || dept?.Code is not ("PQLN" or "PDV"))
             throw new UnauthorizedAccessException("Chỉ cán bộ chuyên trách đang thụ lý hồ sơ mới được quyền từ chối chứng từ bổ sung.");
 
         var d = await docs.GetDetailByIdAsync(documentId)
             ?? throw new InvalidOperationException("Hồ sơ không tồn tại.");
+
+        if (dept.Code == "PQLN" && d.PqlnReceiverId != userId)
+            throw new UnauthorizedAccessException("Chỉ cán bộ PQLN đang thụ lý hồ sơ mới được từ chối.");
+        if (dept.Code == "PDV" && d.PdvReceiverId != userId)
+            throw new UnauthorizedAccessException("Chỉ cán bộ PDV đang thụ lý hồ sơ mới được từ chối.");
 
         var item = d.DebtItems.FirstOrDefault(x => x.Id == itemId)
             ?? throw new InvalidOperationException("Không tìm thấy chứng từ nợ.");
@@ -325,35 +336,14 @@ public class DebtItemVerificationService(
         if (!item.IsSupplemented)
             throw new InvalidOperationException("Chứng từ này chưa được đánh dấu bổ sung.");
 
-        var isDirectPdv = NormalizeWorkflowType(d.WorkflowType) == WorkflowDirectPdv;
         var pkh = await departments.GetByCodeAsync("PKH");
         var pqln = await departments.GetByCodeAsync("PQLN");
+        var pdv = await departments.GetByCodeAsync("PDV");
 
-        var isPkhItem = item.SourceDepartmentId == null || (pkh != null && item.SourceDepartmentId == pkh.Id);
-        var isPqlnItem = pqln != null && item.SourceDepartmentId == pqln.Id;
+        var targetCode = GetTargetDepartmentCode(item, d.WorkflowType, pqln?.Id, pdv?.Id);
+        var alreadyVerified = dept.Code == "PDV" ? item.IsVerifiedByPdv : item.IsVerifiedByPqln;
 
-        bool allowed;
-        if (isPkhItem)
-        {
-            if (isDirectPdv)
-            {
-                allowed = dept.Code == "PDV" && d.PdvReceiverId == userId && !item.IsVerifiedByPdv;
-            }
-            else
-            {
-                allowed = dept.Code == "PQLN" && d.PqlnReceiverId == userId && !item.IsVerifiedByPqln;
-            }
-        }
-        else if (isPqlnItem && !isDirectPdv)
-        {
-            allowed = dept.Code == "PDV" && d.PdvReceiverId == userId && !item.IsVerifiedByPdv;
-        }
-        else
-        {
-            allowed = false;
-        }
-
-        if (!allowed)
+        if (targetCode != dept.Code || alreadyVerified)
             throw new UnauthorizedAccessException("Bạn không có quyền từ chối chứng từ này hoặc chứng từ đã được xác nhận.");
 
         var reason = request.Reason.Trim();
@@ -368,7 +358,7 @@ public class DebtItemVerificationService(
 
         await docs.UpdateDebtItemAsync(item);
 
-        var sourceCode = isPkhItem ? "PKH" : "PQLN";
+        var sourceCode = GetSourceDepartmentCode(item, pkh?.Id, pqln?.Id);
         await audit.AddHistoryAsync(
             documentId,
             d.CurrentDepartmentId,

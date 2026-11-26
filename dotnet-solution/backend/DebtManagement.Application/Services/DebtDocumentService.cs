@@ -22,9 +22,10 @@ public class DebtDocumentService(
         var (user, dept) = await GetActorAsync(users, departments, currentUserId);
         var pkh = await departments.GetByCodeAsync("PKH");
         var pqln = await departments.GetByCodeAsync("PQLN");
+        var pdv = await departments.GetByCodeAsync("PDV");
         var all = await docs.GetAllAsync(status, deptId, search);
         var visible = all.Where(d => CanView(user, dept, d)).ToList();
-        return visible.Select(d => Map(d, pkh?.Id, pqln?.Id)).ToList();
+        return visible.Select(d => Map(d, pkh?.Id, pqln?.Id, pdv?.Id, user, dept?.Code)).ToList();
     }
 
     public async Task<DebtDocumentDetailDto?> GetByIdAsync(Guid id, Guid currentUserId)
@@ -35,7 +36,26 @@ public class DebtDocumentService(
         if (!CanView(user, dept, d))
             throw new UnauthorizedAccessException("Bạn không có quyền xem hồ sơ này");
 
-        var verifierIds = d.DebtItems
+        var pkh = await departments.GetByCodeAsync("PKH");
+        var pqln = await departments.GetByCodeAsync("PQLN");
+        var pdv = await departments.GetByCodeAsync("PDV");
+
+        var visibleItems = new List<DebtItem>();
+        var hiddenItemNames = new List<string>();
+
+        foreach (var x in d.DebtItems)
+        {
+            if (CanViewDebtItem(user, dept?.Code, x, d.WorkflowType, pkh?.Id, pqln?.Id, pdv?.Id))
+            {
+                visibleItems.Add(x);
+            }
+            else if (!string.IsNullOrWhiteSpace(x.ItemName))
+            {
+                hiddenItemNames.Add(x.ItemName.Trim());
+            }
+        }
+
+        var verifierIds = visibleItems
             .SelectMany(x => new[] { x.PqlnVerifiedByUserId, x.PdvVerifiedByUserId })
             .Where(x => x.HasValue)
             .Select(x => x!.Value)
@@ -48,7 +68,7 @@ public class DebtDocumentService(
             userNameCache[verifierId] = verifier?.Name;
         }
 
-        var mappedItems = d.DebtItems.Select(x =>
+        var mappedItems = visibleItems.Select(x =>
         {
             string? pqlnVerifierName = x.PqlnVerifiedByUserId.HasValue && userNameCache.TryGetValue(x.PqlnVerifiedByUserId.Value, out var pqlnName)
                 ? pqlnName
@@ -56,7 +76,20 @@ public class DebtDocumentService(
             string? pdvVerifierName = x.PdvVerifiedByUserId.HasValue && userNameCache.TryGetValue(x.PdvVerifiedByUserId.Value, out var pdvName)
                 ? pdvName
                 : null;
-            return Item(x, pqlnVerifierName, pdvVerifierName);
+            var targetCode = GetTargetDepartmentCode(x, d.WorkflowType, pqln?.Id, pdv?.Id);
+            var targetName = targetCode == "PDV" ? pdv?.Name : pqln?.Name;
+            return Item(x, pqlnVerifierName, pdvVerifierName, targetCode, targetName);
+        }).ToList();
+
+        var distinctHiddenNames = hiddenItemNames
+            .OrderByDescending(n => n.Length)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var historyList = (await docs.GetHistoryAsync(id)).Select(h =>
+        {
+            var maskedNote = MaskHiddenNotes(h.Notes, distinctHiddenNames);
+            return Hist(h, maskedNote);
         }).ToList();
 
         return new(
@@ -77,16 +110,32 @@ public class DebtDocumentService(
             d.CompletedAt, d.CompletedByUserId, null,
             d.UpdatedAt,
             mappedItems,
-            (await docs.GetHistoryAsync(id)).Select(Hist).ToList(),
+            historyList,
             (await docs.GetEditLogsAsync(id)).Select(Log).ToList(),
-            d.ReturnReason, d.ReturnedAt, d.ReturnedByUserId, d.ReturnedByUserName, d.ReturnedFromDepartmentCode);
+            d.ReturnReason, d.ReturnedAt, d.ReturnedByUserId, d.ReturnedByUserName, d.ReturnedFromDepartmentCode,
+            hiddenItemNames.Count);
+    }
+
+    private static string? MaskHiddenNotes(string? notes, IReadOnlyList<string> hiddenNames)
+    {
+        if (string.IsNullOrWhiteSpace(notes) || hiddenNames.Count == 0)
+            return notes;
+
+        var result = notes;
+        foreach (var name in hiddenNames)
+        {
+            result = result.Replace(name, "[Chứng từ nợ đã ẩn]", StringComparison.OrdinalIgnoreCase);
+        }
+        return result;
     }
 
     public async Task<DebtDocumentDto> CreateAsync(CreateDebtDocumentRequest r, Guid uid)
     {
+        var (user, _) = await GetActorAsync(users, departments, uid);
         var pkh = await departments.GetByCodeAsync("PKH")
             ?? throw new InvalidOperationException("Không tìm thấy phòng ban PKH");
         var pqln = await departments.GetByCodeAsync("PQLN");
+        var pdv = await departments.GetByCodeAsync("PDV");
         var nowVn = DateTime.UtcNow.AddHours(7);
         var workflowType = NormalizeWorkflowType(r.WorkflowType);
 
@@ -109,13 +158,19 @@ public class DebtDocumentService(
         var debtItems = r.HasDebtDocuments
             ? (r.DebtItems ?? [])
                 .Where(x => !string.IsNullOrWhiteSpace(x.ItemName))
-                .Select(x => new DebtItem
+                .Select(x =>
                 {
-                    DebtDocumentId = d.Id,
-                    ItemName = x.ItemName.Trim(),
-                    Notes = x.Notes,
-                    SourceDepartmentId = pkh.Id,
-                    CreatedByUserId = uid
+                    var targetCode = NormalizeTargetDeptCode(x.TargetDepartmentCode, workflowType);
+                    var targetDeptId = targetCode == "PDV" ? pdv?.Id : pqln?.Id;
+                    return new DebtItem
+                    {
+                        DebtDocumentId = d.Id,
+                        ItemName = x.ItemName.Trim(),
+                        Notes = x.Notes,
+                        SourceDepartmentId = pkh.Id,
+                        TargetDepartmentId = targetDeptId,
+                        CreatedByUserId = uid
+                    };
                 }).ToList()
             : [];
 
@@ -126,14 +181,19 @@ public class DebtDocumentService(
             await docs.AddDebtItemsAsync(debtItems);
 
         var flowTag = workflowType == WorkflowDirectPdv ? " [Luồng chuyển thẳng PDV]" : "";
+        var itemsSummary = debtItems.Select(x =>
+        {
+            var tCode = x.TargetDepartmentId == pdv?.Id ? "PDV" : "PQLN";
+            return $"{x.ItemName} (Nợ {tCode})";
+        });
         var createNote = debtItems.Count > 0
-            ? $"Khởi tạo hồ sơ{flowTag} tại phòng Khách hàng (Chứng từ nợ: {string.Join(", ", debtItems.Select(x => x.ItemName))}) và gửi SUP PKH"
+            ? $"Khởi tạo hồ sơ{flowTag} tại phòng Khách hàng (Chứng từ nợ: {string.Join(", ", itemsSummary)}) và gửi SUP PKH"
             : $"Khởi tạo hồ sơ{flowTag} tại phòng Khách hàng và gửi SUP PKH";
 
         await audit.AddHistoryAsync(d.Id, null, pkh.Id, CirculationAction.Created,
             DocumentStatus.PkhPendingSup, uid, createNote);
 
-        return Map((await docs.GetByIdAsync(d.Id))!, pkh.Id, pqln?.Id);
+        return Map((await docs.GetByIdAsync(d.Id))!, pkh.Id, pqln?.Id, pdv?.Id, user, "PKH");
     }
 
     public async Task<DebtDocumentDto> UpdateAsync(Guid id, UpdateDebtDocumentRequest r, Guid uid)
@@ -141,6 +201,7 @@ public class DebtDocumentService(
         var (user, dept) = await GetActorAsync(users, departments, uid);
         var pkh = await departments.GetByCodeAsync("PKH");
         var pqln = await departments.GetByCodeAsync("PQLN");
+        var pdv = await departments.GetByCodeAsync("PDV");
         var d = await docs.GetByIdAsync(id) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
         if (!CanEdit(user, dept, d))
             throw new UnauthorizedAccessException("Bạn chỉ được sửa hồ sơ do chính mình khởi tạo hoặc tiếp nhận");
@@ -159,18 +220,30 @@ public class DebtDocumentService(
         {
             await docs.RemoveDebtItemsAsync(id);
             if (r.HasDebtDocuments)
-                await docs.AddDebtItemsAsync(r.DebtItems.Select(x => new DebtItem
-                {
-                    DebtDocumentId = id,
-                    ItemName = x.ItemName,
-                    Notes = x.Notes,
-                    SourceDepartmentId = dept?.Id,
-                    CreatedByUserId = uid
-                }));
+            {
+                await docs.AddDebtItemsAsync(r.DebtItems
+                    .Where(x => !string.IsNullOrWhiteSpace(x.ItemName))
+                    .Select(x =>
+                    {
+                        var targetCode = dept?.Code == "PQLN"
+                            ? "PDV"
+                            : NormalizeTargetDeptCode(x.TargetDepartmentCode, d.WorkflowType);
+                        var targetDeptId = targetCode == "PDV" ? pdv?.Id : pqln?.Id;
+                        return new DebtItem
+                        {
+                            DebtDocumentId = id,
+                            ItemName = x.ItemName.Trim(),
+                            Notes = x.Notes,
+                            SourceDepartmentId = dept?.Id,
+                            TargetDepartmentId = targetDeptId,
+                            CreatedByUserId = uid
+                        };
+                    }));
+            }
         }
 
         await docs.UpdateAsync(d);
-        return Map((await docs.GetByIdAsync(id))!, pkh?.Id, pqln?.Id);
+        return Map((await docs.GetByIdAsync(id))!, pkh?.Id, pqln?.Id, pdv?.Id, user, dept?.Code);
     }
 
     public Task DeleteAsync(Guid id) => docs.DeleteAsync(id);

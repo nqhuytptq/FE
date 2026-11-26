@@ -2,6 +2,7 @@ using DebtManagement.Application.Interfaces;
 using DebtManagement.Domain.Entities;
 using DebtManagement.Shared.Constants;
 using DebtManagement.Shared.DTOs;
+using static DebtManagement.Application.Services.DebtDocumentRules;
 
 namespace DebtManagement.Application.Services;
 
@@ -21,7 +22,7 @@ public class KpiCalculationService(
     {
         var user = await users.GetByIdAsync(userId)
             ?? throw new UnauthorizedAccessException("Tài khoản không tồn tại");
-        if (user.Role != WorkflowConstants.RoleAdmin)
+        if (!string.Equals(user.Role, WorkflowConstants.RoleAdmin, StringComparison.OrdinalIgnoreCase))
             throw new UnauthorizedAccessException("Chỉ Quản trị viên (Admin) mới được thực hiện thao tác này");
     }
 
@@ -83,7 +84,6 @@ public class KpiCalculationService(
         if (existingPeriod?.Status == "Finalized")
             throw new InvalidOperationException($"Kỳ {month:D2}/{year} đã chốt. Vui lòng mở lại kỳ trước khi tính toán lại.");
 
-        // Lưu lại chỉnh sửa thủ công trước đó (nếu đang Draft) để không bị mất khi bấm Tính lại
         var preservedOverrides = existingPeriod?.Violations
             .ToDictionary(
                 v => (v.DebtDocumentId, v.DebtItemId),
@@ -105,30 +105,18 @@ public class KpiCalculationService(
 
         foreach (var doc in docs)
         {
-            var isDirectPdv = doc.WorkflowType == WorkflowConstants.WorkflowDirectPdv;
-            var docTotalSla = isDirectPdv ? cfg.DirectPdvTotalSlaDays : totalStandardSla;
-            var slaDueDate = calendar.AddWorkingDays(doc.IssueDate, docTotalSla, holidayMap);
+            // Mốc tính nợ chứng từ: Từ ngày SUP PDV duyệt bút toán
+            if (!doc.SupPdvApprovedEntryAt.HasValue) continue;
+            if (doc.DebtItems.Count == 0) continue;
 
-            // Chưa đến hạn trong tháng này thì chuyển sang xét ở tháng sau
-            if (slaDueDate > periodEnd) continue;
+            var supPdvApproveDate = ToVnDate(doc.SupPdvApprovedEntryAt.Value);
+            if (supPdvApproveDate > periodEnd) continue;
 
-            // Trường hợp hồ sơ có DebtItems -> tính trên từng chứng từ; nếu không có DebtItem -> lấy 1 dòng đại diện cho hồ sơ
-            if (doc.DebtItems.Count > 0)
+            foreach (var item in doc.DebtItems)
             {
-                foreach (var item in doc.DebtItems)
-                {
-                    var violation = EvaluateTarget(
-                        periodId, doc, item, slaDueDate, isDirectPdv,
-                        periodStart, periodEnd, prevPeriodEnd, cfg, holidayMap, preservedOverrides);
-                    if (violation != null)
-                        newViolations.Add(violation);
-                }
-            }
-            else
-            {
-                var violation = EvaluateTarget(
-                    periodId, doc, null, slaDueDate, isDirectPdv,
-                    periodStart, periodEnd, prevPeriodEnd, cfg, holidayMap, preservedOverrides);
+                var violation = EvaluateDebtItemFromSupPdvApproval(
+                    periodId, doc, item, supPdvApproveDate,
+                    periodStart, periodEnd, prevPeriodEnd, holidayMap, preservedOverrides);
                 if (violation != null)
                     newViolations.Add(violation);
             }
@@ -162,27 +150,27 @@ public class KpiCalculationService(
         }
     }
 
-    private KpiViolationItem? EvaluateTarget(
+    private KpiViolationItem? EvaluateDebtItemFromSupPdvApproval(
         Guid periodId,
         DebtDocument doc,
-        DebtItem? item,
-        DateOnly slaDueDate,
-        bool isDirectPdv,
+        DebtItem item,
+        DateOnly supPdvApproveDate,
         DateOnly periodStart,
         DateOnly periodEnd,
         DateOnly prevPeriodEnd,
-        KpiConfig cfg,
         IReadOnlyDictionary<DateOnly, bool> holidayMap,
         Dictionary<(Guid, Guid?), (string? OverrideDept, bool IsExcluded, string? AdminNote)> preservedOverrides)
     {
-        var actualCompletedDate = ResolveActualCompletedDate(doc, item, isDirectPdv, cfg.CompletionMilestoneType);
+        var sourceCode = GetSourceDepartmentCode(item);
+        var targetCode = GetTargetDepartmentCode(item, doc.WorkflowType);
+        var actualCompletedDate = ResolveDebtItemCompletedDate(item, targetCode);
 
-        // Nếu đã hoàn tất đúng/trước hạn SLA thì không vi phạm
-        if (actualCompletedDate.HasValue && actualCompletedDate.Value <= slaDueDate)
+        // Nếu chứng từ nợ đã được xác nhận hoàn tất trước hoặc ngay tại ngày SUP PDV duyệt bút toán -> không nợ
+        if (actualCompletedDate.HasValue && actualCompletedDate.Value <= supPdvApproveDate)
             return null;
 
-        // Nếu thuộc kỳ cũ và đã hoàn tất trước đầu tháng này thì kỳ này không tính nữa
-        var isCarriedOver = slaDueDate < periodStart;
+        // Nếu nợ kéo dài từ tháng trước nhưng đã trả xong trước đầu tháng này -> không tính vào tháng này
+        var isCarriedOver = supPdvApproveDate < periodStart;
         if (isCarriedOver && actualCompletedDate.HasValue && actualCompletedDate.Value < periodStart)
             return null;
 
@@ -192,31 +180,30 @@ public class KpiCalculationService(
 
         var delayDays = isCarriedOver
             ? calendar.CountWorkingDaysBetween(prevPeriodEnd, evalEnd, holidayMap)
-            : calendar.CountWorkingDaysBetween(slaDueDate, evalEnd, holidayMap);
+            : calendar.CountWorkingDaysBetween(supPdvApproveDate, evalEnd, holidayMap);
 
-        // Nếu kỳ chuyển tiếp đã hết trễ thêm trong tháng mới thì bỏ qua
-        if (isCarriedOver && delayDays <= 0)
+        if (delayDays <= 0)
             return null;
 
-        var (pkhDays, pqlnDays, pdvDays, autoDept) = ComputeDepartmentHoldingAndAttribution(
-            doc, item, isDirectPdv, evalEnd, cfg, holidayMap);
+        var (pkhDays, pqlnDays, pdvDays) = ComputeStageReferenceDays(doc, item, supPdvApproveDate, evalEnd, holidayMap);
 
-        var key = (doc.Id, item?.Id);
+        var key = (doc.Id, (Guid?)item.Id);
         preservedOverrides.TryGetValue(key, out var prev);
 
+        var autoDept = sourceCode;
         var finalDept = string.IsNullOrWhiteSpace(prev.OverrideDept) ? autoDept : prev.OverrideDept!;
 
         return new KpiViolationItem
         {
             KpiPeriodId = periodId,
             DebtDocumentId = doc.Id,
-            DebtItemId = item?.Id,
+            DebtItemId = item.Id,
             DocumentNumber = doc.DocumentNumber,
             CustomerName = doc.CustomerName,
-            ItemName = item?.ItemName ?? "(Hồ sơ không có chứng từ nợ lẻ)",
+            ItemName = $"{item.ItemName} (Nợ {targetCode})",
             WorkflowType = doc.WorkflowType,
             IssueDate = doc.IssueDate,
-            SlaDueDate = slaDueDate,
+            SlaDueDate = supPdvApproveDate,
             ActualCompletedDate = actualCompletedDate,
             PkhDays = pkhDays,
             PqlnDays = pqlnDays,
@@ -231,195 +218,44 @@ public class KpiCalculationService(
         };
     }
 
-    private static DateOnly? ResolveActualCompletedDate(
-        DebtDocument doc,
-        DebtItem? item,
-        bool isDirectPdv,
-        string milestoneType)
-    {
-        if (milestoneType == "EntryPostedAt")
-        {
-            if (item == null)
-                return doc.EntryPostedAt.HasValue ? ToVnDate(doc.EntryPostedAt.Value) : null;
-
-            // Với chế độ EntryPostedAt: lấy ngày sau cùng của đi bút toán và xác nhận chứng từ
-            var itemDoneAt = GetItemFinalVerifiedAt(doc, item, isDirectPdv);
-            if (!doc.EntryPostedAt.HasValue || !itemDoneAt.HasValue) return null;
-            var maxDt = doc.EntryPostedAt.Value > itemDoneAt.Value ? doc.EntryPostedAt.Value : itemDoneAt.Value;
-            return ToVnDate(maxDt);
-        }
-
-        // Mặc định: CompletedAt (hoặc PdvVerifiedAt/PqlnVerifiedAt sau khi hồ sơ hoàn tất)
-        if (item == null)
-            return doc.CompletedAt.HasValue ? ToVnDate(doc.CompletedAt.Value) : null;
-
-        var verifiedAt = GetItemFinalVerifiedAt(doc, item, isDirectPdv);
-        if (verifiedAt.HasValue)
-        {
-            if (doc.CompletedAt.HasValue && doc.CompletedAt.Value > verifiedAt.Value)
-                return ToVnDate(verifiedAt.Value);
-            return ToVnDate(verifiedAt.Value);
-        }
-
-        return doc.CompletedAt.HasValue ? ToVnDate(doc.CompletedAt.Value) : null;
-    }
-
-    private static DateTime? GetItemFinalVerifiedAt(DebtDocument doc, DebtItem item, bool isDirectPdv)
+    private static DateOnly? ResolveDebtItemCompletedDate(DebtItem item, string targetCode)
     {
         if (!item.IsSupplemented) return null;
-        if (isDirectPdv) return item.PdvVerifiedAt;
 
-        var srcCode = item.SourceDepartment?.Code ?? WorkflowConstants.DeptPkh;
-        if (srcCode == WorkflowConstants.DeptPqln)
-            return item.PdvVerifiedAt;
+        if (targetCode == "PDV")
+            return item.IsVerifiedByPdv && item.PdvVerifiedAt.HasValue ? ToVnDate(item.PdvVerifiedAt.Value) : null;
 
-        // Chứng từ PKH đi qua PQLN: nếu đã được PDV verify thì lấy PdvVerifiedAt, ngược lại lấy PqlnVerifiedAt
-        return item.PdvVerifiedAt ?? item.PqlnVerifiedAt;
+        return item.IsVerifiedByPqln && item.PqlnVerifiedAt.HasValue ? ToVnDate(item.PqlnVerifiedAt.Value) : null;
     }
 
-    private (int PkhDays, int PqlnDays, int PdvDays, string AutoDept) ComputeDepartmentHoldingAndAttribution(
+    private (int PkhDays, int PqlnDays, int PdvDays) ComputeStageReferenceDays(
         DebtDocument doc,
-        DebtItem? item,
-        bool isDirectPdv,
+        DebtItem item,
+        DateOnly supPdvApproveDate,
         DateOnly evalEnd,
-        KpiConfig cfg,
         IReadOnlyDictionary<DateOnly, bool> holidayMap)
     {
-        var issueDate = doc.IssueDate;
-        var srcCode = item?.SourceDepartment?.Code ?? WorkflowConstants.DeptPkh;
+        var sourceCode = GetSourceDepartmentCode(item);
+        var suppDate = item.SupplementedAt.HasValue ? ToVnDate(item.SupplementedAt.Value) : (DateOnly?)null;
 
-        // 1. Thời gian PKH giữ
-        DateOnly? pkhApproveDate = doc.SupPkhApprovedAt.HasValue ? ToVnDate(doc.SupPkhApprovedAt.Value) : null;
-        DateOnly pkhEnd = pkhApproveDate ?? evalEnd;
+        var borrowerEnd = suppDate.HasValue && suppDate.Value < evalEnd ? suppDate.Value : evalEnd;
+        var borrowerDebtDays = borrowerEnd > supPdvApproveDate
+            ? calendar.CountWorkingDaysBetween(supPdvApproveDate, borrowerEnd, holidayMap)
+            : 0;
 
-        if (item != null && srcCode == WorkflowConstants.DeptPkh)
+        var verifierWaitDays = 0;
+        if (suppDate.HasValue && evalEnd > suppDate.Value)
         {
-            if (item.SupplementedAt.HasValue)
-            {
-                var suppDate = ToVnDate(item.SupplementedAt.Value);
-                if (suppDate > pkhEnd) pkhEnd = suppDate;
-            }
-            else if (evalEnd > pkhEnd)
-            {
-                pkhEnd = evalEnd; // PKH vẫn chưa bổ sung chứng từ này
-            }
-        }
-        var pkhDays = calendar.CountWorkingDaysBetween(issueDate, pkhEnd, holidayMap);
-
-        // 2. Thời gian PQLN giữ
-        int pqlnDays = 0;
-        DateOnly? pqlnApproveDate = doc.SupPqlnApprovedAt.HasValue ? ToVnDate(doc.SupPqlnApprovedAt.Value) : null;
-
-        if (!isDirectPdv && pkhApproveDate.HasValue)
-        {
-            var pqlnStage1End = pqlnApproveDate ?? evalEnd;
-            pqlnDays += calendar.CountWorkingDaysBetween(pkhApproveDate.Value, pqlnStage1End, holidayMap);
-
-            if (item != null && srcCode == WorkflowConstants.DeptPkh && item.SupplementedAt.HasValue)
-            {
-                var suppDate = ToVnDate(item.SupplementedAt.Value);
-                var verifyWaitStart = suppDate > pkhApproveDate.Value ? suppDate : pkhApproveDate.Value;
-                if (pqlnApproveDate.HasValue && verifyWaitStart > pqlnApproveDate.Value)
-                {
-                    var verifyEnd = item.PqlnVerifiedAt.HasValue ? ToVnDate(item.PqlnVerifiedAt.Value) : evalEnd;
-                    pqlnDays += calendar.CountWorkingDaysBetween(verifyWaitStart, verifyEnd, holidayMap);
-                }
-            }
-            else if (item != null && srcCode == WorkflowConstants.DeptPqln)
-            {
-                if (pqlnApproveDate.HasValue)
-                {
-                    var pqlnSuppEnd = item.SupplementedAt.HasValue ? ToVnDate(item.SupplementedAt.Value) : evalEnd;
-                    if (pqlnSuppEnd > pqlnApproveDate.Value)
-                        pqlnDays += calendar.CountWorkingDaysBetween(pqlnApproveDate.Value, pqlnSuppEnd, holidayMap);
-                }
-            }
+            var verifyStart = suppDate.Value > supPdvApproveDate ? suppDate.Value : supPdvApproveDate;
+            verifierWaitDays = calendar.CountWorkingDaysBetween(verifyStart, evalEnd, holidayMap);
         }
 
-        // 3. Thời gian PDV giữ
-        int pdvDays = 0;
-        DateOnly? prevDeptDone = isDirectPdv ? pkhApproveDate : pqlnApproveDate;
-        if (prevDeptDone.HasValue)
-        {
-            var docDoneDate = cfg.CompletionMilestoneType == "EntryPostedAt"
-                ? (doc.EntryPostedAt.HasValue ? ToVnDate(doc.EntryPostedAt.Value) : (DateOnly?)null)
-                : (doc.CompletedAt.HasValue ? ToVnDate(doc.CompletedAt.Value) : (DateOnly?)null);
+        var targetCode = GetTargetDepartmentCode(item, doc.WorkflowType);
+        var pkhDays = sourceCode == "PKH" ? borrowerDebtDays : 0;
+        var pqlnDays = sourceCode == "PQLN" ? borrowerDebtDays : (targetCode == "PQLN" ? verifierWaitDays : 0);
+        var pdvDays = targetCode == "PDV" ? verifierWaitDays : 0;
 
-            var entryApprovedDate = doc.SupPdvApprovedEntryAt.HasValue ? ToVnDate(doc.SupPdvApprovedEntryAt.Value) : (DateOnly?)null;
-
-            if (item == null)
-            {
-                pdvDays = calendar.CountWorkingDaysBetween(prevDeptDone.Value, docDoneDate ?? evalEnd, holidayMap);
-            }
-            else
-            {
-                var needsPdvVerify = isDirectPdv || srcCode == WorkflowConstants.DeptPqln;
-                if (needsPdvVerify)
-                {
-                    // Chặng 1: PDV xử lý từ khi nhận đến khi duyệt bút toán
-                    var stage1End = entryApprovedDate ?? docDoneDate ?? evalEnd;
-                    pdvDays += calendar.CountWorkingDaysBetween(prevDeptDone.Value, stage1End, holidayMap);
-
-                    // Chặng 2: sau khi chứng từ được bổ sung -> PDV verify
-                    if (item.SupplementedAt.HasValue)
-                    {
-                        var suppDate = ToVnDate(item.SupplementedAt.Value);
-                        var waitStart = suppDate > prevDeptDone.Value ? suppDate : prevDeptDone.Value;
-                        if (entryApprovedDate.HasValue && waitStart > entryApprovedDate.Value)
-                        {
-                            var verifyEnd = item.PdvVerifiedAt.HasValue ? ToVnDate(item.PdvVerifiedAt.Value) : (docDoneDate ?? evalEnd);
-                            pdvDays += calendar.CountWorkingDaysBetween(waitStart, verifyEnd, holidayMap);
-                        }
-                    }
-                }
-                else
-                {
-                    // Chứng từ PKH trong luồng chuẩn: nếu PDV đã duyệt bút toán và đang chờ PKH/PQLN thì không tính vào PDV
-                    var stageEnd = entryApprovedDate ?? docDoneDate ?? evalEnd;
-                    pdvDays = calendar.CountWorkingDaysBetween(prevDeptDone.Value, stageEnd, holidayMap);
-                }
-            }
-        }
-
-        // 4. Gợi ý phòng chịu lỗi chính
-        // Ưu tiên nếu chứng từ đang kẹt chưa bổ sung/xác nhận ở khâu cụ thể
-        if (item != null && !item.IsSupplemented)
-            return (pkhDays, pqlnDays, pdvDays, srcCode);
-
-        if (item != null && item.IsSupplemented)
-        {
-            if (!isDirectPdv && srcCode == WorkflowConstants.DeptPkh && !item.IsVerifiedByPqln)
-                return (pkhDays, pqlnDays, pdvDays, WorkflowConstants.DeptPqln);
-            if ((isDirectPdv || srcCode == WorkflowConstants.DeptPqln) && !item.IsVerifiedByPdv)
-                return (pkhDays, pqlnDays, pdvDays, WorkflowConstants.DeptPdv);
-        }
-
-        // So sánh mức vượt SLA của từng phòng
-        var pkhOver = pkhDays - cfg.SlaPkhDays;
-        var pqlnOver = isDirectPdv ? int.MinValue : (pqlnDays - cfg.SlaPqlnDays);
-        var pdvOver = pdvDays - cfg.SlaPdvDays;
-
-        var candidates = new List<(string Code, int Over)>
-        {
-            (WorkflowConstants.DeptPkh, pkhOver)
-        };
-        if (!isDirectPdv)
-            candidates.Add((WorkflowConstants.DeptPqln, pqlnOver));
-        candidates.Add((WorkflowConstants.DeptPdv, pdvOver));
-
-        var best = candidates.OrderByDescending(x => x.Over).First();
-        if (best.Over > 0)
-            return (pkhDays, pqlnDays, pdvDays, best.Code);
-
-        // Nếu tổng cộng dồn vượt SLA dù từng phòng sát nút: chọn phòng hiện tại hoặc phòng giữ lâu nhất
-        var fallback = doc.Status.ToString() switch
-        {
-            WorkflowConstants.StatusNames.PkhPendingSup or WorkflowConstants.StatusNames.ReturnedToPkh => WorkflowConstants.DeptPkh,
-            WorkflowConstants.StatusNames.PqlnPendingReceive or WorkflowConstants.StatusNames.PqlnReceived or WorkflowConstants.StatusNames.PqlnPendingSup or WorkflowConstants.StatusNames.ReturnedToPqln => WorkflowConstants.DeptPqln,
-            _ => candidates.OrderByDescending(x => x.Over).First().Code
-        };cd ..
-
-        return (pkhDays, pqlnDays, pdvDays, fallback);
+        return (pkhDays, pqlnDays, pdvDays);
     }
 
     public async Task<KpiPeriodDetailDto> UpdateViolationOverrideAsync(Guid violationId, UpdateViolationOverrideRequest request, Guid adminUserId)
@@ -521,7 +357,7 @@ public class KpiCalculationService(
         var summaryRows = new List<string[]>
         {
             new[] { $"BÁO CÁO ĐIỂM TRỪ KPI CHỨNG TỪ NỢ ({fromMonth:D2}/{fromYear} - {toMonth:D2}/{toYear})" },
-            new[] { "Mã phòng", "Tên phòng", "Số ngày phát sinh nợ (II.1)", "Tổng ngày làm việc", "Điểm trừ SL chứng từ (II.1)", "Số chứng từ trễ (II.2)", "Tổng ngày trễ", "Điểm trừ thời gian nợ (II.2)", "Tổng điểm trừ" }
+            new[] { "Mã phòng", "Tên phòng", "Số ngày phát sinh nợ (II.1)", "Tổng ngày làm việc", "Điểm trừ SL chứng từ (II.1)", "Số chứng từ nợ (II.2)", "Tổng ngày nợ", "Điểm trừ thời gian nợ (II.2)", "Tổng điểm trừ" }
         };
 
         foreach (var d in report.CumulativeScores)
@@ -542,14 +378,17 @@ public class KpiCalculationService(
 
         var detailRows = new List<string[]>
         {
-            new[] { "Kỳ", "Số văn bản", "Khách hàng", "Chứng từ nợ", "Luồng", "Ngày phát sinh", "Hạn SLA", "Ngày hoàn tất", "PKH (ngày)", "PQLN (ngày)", "PDV (ngày)", "Số ngày trễ", "Điểm trừ II.2", "Phòng chịu lỗi", "Chuyển tiếp kỳ trước", "Loại trừ", "Ghi chú" }
+            new[] { "Kỳ", "Số văn bản", "Khách hàng", "Chứng từ nợ", "Luồng", "Ngày tạo HS", "Ngày SUP PDV duyệt BT", "Ngày trả xong CT", "Ngày nợ của phòng nợ", "Ngày chờ xác nhận", "Số ngày nợ tính KPI", "Điểm trừ II.2", "Phòng chịu lỗi", "Chuyển tiếp kỳ trước", "Loại trừ", "Ghi chú" }
         };
 
         foreach (var p in periods)
         {
-            foreach (var v in p.Violations.OrderBy(x => x.IssueDate))
+            foreach (var v in p.Violations.OrderBy(x => x.SlaDueDate))
             {
                 var penalty = v.IsExcluded ? 0m : CalculateSingleItemDelayPenalty(v.DelayWorkingDays, cfg);
+                var borrowerDays = v.AutoSuggestedDepartmentCode == "PQLN" ? v.PqlnDays : v.PkhDays;
+                var verifyWaitDays = v.PdvDays > 0 ? v.PdvDays : (v.AutoSuggestedDepartmentCode == "PKH" ? v.PqlnDays : 0);
+
                 detailRows.Add(
                 [
                     $"{p.Month:D2}/{p.Year}",
@@ -559,10 +398,9 @@ public class KpiCalculationService(
                     v.WorkflowType,
                     v.IssueDate.ToString("dd/MM/yyyy"),
                     v.SlaDueDate.ToString("dd/MM/yyyy"),
-                    v.ActualCompletedDate?.ToString("dd/MM/yyyy") ?? "Chưa hoàn tất",
-                    v.PkhDays.ToString(),
-                    v.PqlnDays.ToString(),
-                    v.PdvDays.ToString(),
+                    v.ActualCompletedDate?.ToString("dd/MM/yyyy") ?? "Chưa trả xong",
+                    borrowerDays.ToString(),
+                    verifyWaitDays.ToString(),
                     v.DelayWorkingDays.ToString(),
                     penalty.ToString("0.####"),
                     v.FinalDepartmentCode,
@@ -585,7 +423,7 @@ public class KpiCalculationService(
         var scores = ComputeDepartmentScores(p, cfg);
         var items = p.Violations
             .OrderBy(x => x.IsExcluded)
-            .ThenBy(x => x.IssueDate)
+            .ThenBy(x => x.SlaDueDate)
             .ThenBy(x => x.DocumentNumber)
             .Select(v => new KpiViolationItemDto(
                 v.Id, v.DebtDocumentId, v.DebtItemId, v.DocumentNumber, v.CustomerName, v.ItemName,
@@ -608,9 +446,10 @@ public class KpiCalculationService(
         return TrackedDepartments.Select(dept =>
         {
             var deptItems = active.Where(v => v.FinalDepartmentCode == dept.Code).ToList();
+
             var distinctLateDays = deptItems
                 .Where(v => !v.IsCarriedOver)
-                .Select(v => v.IssueDate)
+                .Select(v => v.SlaDueDate)
                 .Distinct()
                 .Count();
 

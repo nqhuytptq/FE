@@ -106,7 +106,8 @@ public class DebtWorkflowService(
             throw new InvalidOperationException($"Không thể tiếp nhận: Hồ sơ này đã được {receiverName} tiếp nhận trước đó.");
         }
 
-        var claimed = await docs.TryTakePqlnOwnershipAsync(id, u, DateTime.UtcNow);
+        var now = DateTime.UtcNow;
+        var claimed = await docs.TryTakePqlnOwnershipAsync(id, u, now);
         if (!claimed)
         {
             var latest = await docs.GetDetailByIdAsync(id);
@@ -115,6 +116,12 @@ public class DebtWorkflowService(
                 ?? "cán bộ khác";
             throw new InvalidOperationException($"Không thể tiếp nhận: Hồ sơ này vừa được {receiverName} tiếp nhận trước đó.");
         }
+
+        d.PqlnReceiverId = u;
+        d.PqlnReceiver = user;
+        d.PqlnReceivedAt = now;
+        d.Status = DocumentStatus.PqlnReceived;
+        ClearReturnInfo(d);
 
         await audit.AddHistoryAsync(id, dept.Id, dept.Id, CirculationAction.PqlnReceived, DocumentStatus.PqlnReceived, u, "Cán bộ PQLN đã tiếp nhận hồ sơ");
     }
@@ -178,7 +185,8 @@ public class DebtWorkflowService(
             throw new InvalidOperationException($"Không thể tiếp nhận: Hồ sơ này đã được {receiverName} tiếp nhận trước đó.");
         }
 
-        var claimed = await docs.TryTakePdvOwnershipAsync(id, u, DateTime.UtcNow);
+        var now = DateTime.UtcNow;
+        var claimed = await docs.TryTakePdvOwnershipAsync(id, u, now);
         if (!claimed)
         {
             var latest = await docs.GetDetailByIdAsync(id);
@@ -187,6 +195,12 @@ public class DebtWorkflowService(
                 ?? "cán bộ khác";
             throw new InvalidOperationException($"Không thể tiếp nhận: Hồ sơ này vừa được {receiverName} tiếp nhận trước đó.");
         }
+
+        d.PdvReceiverId = u;
+        d.PdvReceiver = user;
+        d.PdvReceivedAt = now;
+        d.Status = DocumentStatus.PdvReceived;
+        ClearReturnInfo(d);
 
         await audit.AddHistoryAsync(id, dept.Id, dept.Id, CirculationAction.PdvReceived, DocumentStatus.PdvReceived, u, "Cán bộ Giao dịch PDV đã tiếp nhận hồ sơ");
     }
@@ -223,7 +237,7 @@ public class DebtWorkflowService(
     {
         var (user, dept) = await GetActorAsync(users, departments, u);
         if (dept?.Code != "PDV" || user.Role != "manager")
-            throw new UnauthorizedAccessException("Chỉ SUP phòng PDV mới có quyền phê duyệt bước này.");
+            throw new UnauthorizedAccessException("Chỉ SUP phòng PDV mới có quyền phê duyệt bút toán.");
 
         var d = await docs.GetDetailByIdAsync(id)
             ?? throw new InvalidOperationException("Hồ sơ không tồn tại.");
@@ -231,67 +245,51 @@ public class DebtWorkflowService(
         if (d.CurrentDepartmentId != dept.Id)
             throw new InvalidOperationException("Hồ sơ hiện không nằm tại phòng PDV.");
 
-        if (d.Status is not (DocumentStatus.PdvEntryPosted or DocumentStatus.PdvEntryApproved))
-            throw new InvalidOperationException("Hồ sơ không ở trạng thái chờ SUP PDV phê duyệt.");
+        if (d.Status == DocumentStatus.PdvEntryApproved)
+            throw new InvalidOperationException("Hồ sơ đã được SUP PDV duyệt bút toán. Hệ thống sẽ tự động hoàn tất ngay khi toàn bộ chứng từ nợ được bổ sung và xác nhận đủ.");
+
+        if (d.Status != DocumentStatus.PdvEntryPosted)
+            throw new InvalidOperationException("Hồ sơ không ở trạng thái chờ SUP PDV duyệt bút toán.");
 
         var pkh = await departments.GetByCodeAsync("PKH");
         var pqln = await departments.GetByCodeAsync("PQLN");
-        var unsupItems = d.DebtItems.Where(x => !IsItemCompleted(x, d.WorkflowType, pkh?.Id, pqln?.Id)).ToList();
+        var pdv = await departments.GetByCodeAsync("PDV");
+        var unsupItems = d.DebtItems.Where(x => !IsItemCompleted(x, d.WorkflowType, pkh?.Id, pqln?.Id, pdv?.Id)).ToList();
         var allSupplemented = unsupItems.Count == 0;
         var isDefaultUiNote = string.IsNullOrWhiteSpace(n)
-            || n.Trim().Equals("SUP PDV kiểm tra và duyệt hoàn tất", StringComparison.OrdinalIgnoreCase);
+            || n.Trim().Equals("SUP PDV kiểm tra và duyệt hoàn tất", StringComparison.OrdinalIgnoreCase)
+            || n.Trim().Equals("SUP PDV kiểm tra và duyệt bút toán", StringComparison.OrdinalIgnoreCase);
 
+        var now = DateTime.UtcNow;
         ClearReturnInfo(d);
+        d.SupPdvApprovedEntryAt = now;
+        d.SupPdvEntryApproverId = u;
 
-        if (d.Status == DocumentStatus.PdvEntryPosted)
+        if (!allSupplemented)
         {
-            d.SupPdvApprovedEntryAt = DateTime.UtcNow;
-            d.SupPdvEntryApproverId = u;
-
-            if (!allSupplemented)
-            {
-                d.Status = DocumentStatus.PdvEntryApproved;
-                await docs.UpdateAsync(d);
-
-                var note1 = isDefaultUiNote
-                    ? $"SUP PDV phê duyệt Lần 1: Đã hoàn tất đi bút toán, chờ bổ sung/xác nhận {unsupItems.Count} chứng từ nợ"
-                    : n!.Trim();
-
-                await audit.AddHistoryAsync(id, d.CurrentDepartmentId, d.CurrentDepartmentId,
-                    CirculationAction.PdvSupApprovedEntry, d.Status, u, note1);
-            }
-            else
-            {
-                d.Status = DocumentStatus.Completed;
-                d.CompletedAt = DateTime.UtcNow;
-                d.CompletedByUserId = u;
-                await docs.UpdateAsync(d);
-
-                var noteDone = isDefaultUiNote
-                    ? "SUP PDV phê duyệt: Đã đi bút toán và đủ chứng từ nợ — Hồ sơ ĐÃ HOÀN TẤT"
-                    : n!.Trim();
-
-                await audit.AddHistoryAsync(id, d.CurrentDepartmentId, d.CurrentDepartmentId,
-                    CirculationAction.Completed, d.Status, u, noteDone);
-            }
-        }
-        else
-        {
-            if (!allSupplemented)
-                throw new InvalidOperationException(
-                    $"Không thể duyệt hoàn tất (Lần 2): Hồ sơ vẫn còn {unsupItems.Count} chứng từ nợ chưa bổ sung hoặc chưa được xác nhận đủ.");
-
-            d.Status = DocumentStatus.Completed;
-            d.CompletedAt = DateTime.UtcNow;
-            d.CompletedByUserId = u;
+            d.Status = DocumentStatus.PdvEntryApproved;
             await docs.UpdateAsync(d);
 
-            var note2 = isDefaultUiNote
-                ? "SUP PDV phê duyệt Lần 2: Đã bổ sung và xác nhận đủ chứng từ nợ — Hồ sơ ĐÃ HOÀN TẤT"
+            var notePending = isDefaultUiNote
+                ? $"SUP PDV duyệt bút toán: Đã hoàn tất hạch toán, chờ bổ sung/xác nhận {unsupItems.Count} chứng từ nợ (hồ sơ sẽ tự động hoàn tất khi đủ)"
                 : n!.Trim();
 
             await audit.AddHistoryAsync(id, d.CurrentDepartmentId, d.CurrentDepartmentId,
-                CirculationAction.Completed, d.Status, u, note2);
+                CirculationAction.PdvSupApprovedEntry, d.Status, u, notePending);
+        }
+        else
+        {
+            d.Status = DocumentStatus.Completed;
+            d.CompletedAt = now;
+            d.CompletedByUserId = u;
+            await docs.UpdateAsync(d);
+
+            var noteDone = isDefaultUiNote
+                ? "SUP PDV duyệt bút toán: Đã đủ chứng từ nợ — Hồ sơ ĐÃ HOÀN TẤT"
+                : n!.Trim();
+
+            await audit.AddHistoryAsync(id, d.CurrentDepartmentId, d.CurrentDepartmentId,
+                CirculationAction.Completed, d.Status, u, noteDone);
         }
     }
 
@@ -325,24 +323,19 @@ public class DebtWorkflowService(
 
         var isAllowed = (actorDept.Code, user.Role, d.Status, targetCode) switch
         {
-            // SUP PKH trả lại cho NV PKH
             ("PKH", "manager", DocumentStatus.PkhPendingSup, "PKH") => true,
 
-            // NV PQLN trả về PKH (kể cả khi đang ở PqlnPendingReceive, PqlnReceived, hoặc ReturnedToPqln)
             ("PQLN", "staff", DocumentStatus.PqlnPendingReceive, "PKH") when !isDirectPdv => true,
             ("PQLN", "staff", DocumentStatus.PqlnReceived or DocumentStatus.ReturnedToPqln, "PKH")
                 when !isDirectPdv && d.PqlnReceiverId == u => true,
 
-            // SUP PQLN trả về NV PQLN hoặc về PKH
             ("PQLN", "manager", DocumentStatus.PqlnPendingSup, "PQLN" or "PKH") when !isDirectPdv => true,
 
-            // NV PDV trả về PQLN (luồng chuẩn) hoặc về PKH
             ("PDV", "staff", DocumentStatus.PdvPendingReceive, "PKH") => true,
             ("PDV", "staff", DocumentStatus.PdvPendingReceive, "PQLN") when !isDirectPdv => true,
             ("PDV", "staff", DocumentStatus.PdvReceived, "PKH") when d.PdvReceiverId == u => true,
             ("PDV", "staff", DocumentStatus.PdvReceived, "PQLN") when !isDirectPdv && d.PdvReceiverId == u => true,
 
-            // SUP PDV tại PdvEntryPosted trả về PQLN (luồng chuẩn) hoặc trả thẳng về PKH
             ("PDV", "manager", DocumentStatus.PdvEntryPosted, "PKH") => true,
             ("PDV", "manager", DocumentStatus.PdvEntryPosted, "PQLN") when !isDirectPdv => true,
 
@@ -358,7 +351,6 @@ public class DebtWorkflowService(
         if (targetCode == "PKH")
         {
             d.Status = DocumentStatus.ReturnedToPkh;
-            // Reset thông tin tiếp nhận/duyệt của các bước sau để vòng xử lý lại hoạt động bình thường
             d.SupPkhApprovedAt = null;
             d.SupPkhApproverId = null;
             d.PqlnReceiverId = null;

@@ -51,11 +51,13 @@ public class KpiRepository(AppDbContext db) : IKpiRepository
         await db.SaveChangesAsync();
     }
 
-    public Task<List<DebtDocument>> GetDocumentsForKpiAsync(DateOnly effectiveFrom)
+public Task<List<DebtDocument>> GetDocumentsForKpiAsync(DateOnly effectiveFrom)
         => db.DebtDocuments
             .AsNoTracking()
             .Include(d => d.DebtItems)
                 .ThenInclude(i => i.SourceDepartment)
+            .Include(d => d.DebtItems)
+                .ThenInclude(i => i.TargetDepartment)
             .Where(d => d.IssueDate >= effectiveFrom)
             .OrderBy(d => d.IssueDate)
             .ToListAsync();

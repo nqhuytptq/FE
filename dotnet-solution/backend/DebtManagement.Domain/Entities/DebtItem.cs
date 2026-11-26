@@ -18,11 +18,14 @@ public class DebtItem
     public Guid? PdvVerifiedByUserId { get; set; }
     public string? Notes { get; set; }                         // Ghi chú
 
-    // Phòng ban khai báo chứng từ này (PKH / PQLN)
+    // Phòng ban nợ chứng từ này (PKH / PQLN)
     public Guid? SourceDepartmentId { get; set; }
-    // Người khai báo chứng từ
+    // Phòng ban được nợ / có trách nhiệm xác nhận chứng từ này (PQLN / PDV)
+    public Guid? TargetDepartmentId { get; set; }
+
     public Guid? CreatedByUserId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
     // --- Thông tin từ chối bổ sung ---
     public string? LastRejectReason { get; set; }
     public DateTime? RejectedAt { get; set; }
@@ -33,5 +36,6 @@ public class DebtItem
     public DebtDocument? DebtDocument { get; set; }
     public AppUser? SupplementedByUser { get; set; }
     public Department? SourceDepartment { get; set; }
+    public Department? TargetDepartment { get; set; }
     public AppUser? CreatedByUser { get; set; }
 }

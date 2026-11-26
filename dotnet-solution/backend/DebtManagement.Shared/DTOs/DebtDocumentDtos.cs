@@ -34,12 +34,14 @@ public record DebtItemDto(
     DateTime? RejectedAt = null,
     Guid? RejectedByUserId = null,
     string? RejectedByUserName = null,
-    string? RejectedByDepartmentCode = null);
-
+    string? RejectedByDepartmentCode = null,
+    Guid? TargetDepartmentId = null,
+    string? TargetDepartmentName = null,
+    string? TargetDepartmentCode = null);
 
 public record SupplementItemsRequest(List<Guid> SupplementedItemIds, string? Notes);
 public record AddDebtItemsRequest(List<CreateDebtItemRequest> Items, string? Notes);
-public record UpdateDebtItemRequest(string ItemName, string? Notes);
+public record UpdateDebtItemRequest(string ItemName, string? Notes, string? TargetDepartmentCode = null);
 
 public record DebtDocumentDto(
     Guid Id,
@@ -125,7 +127,9 @@ public record DebtDocumentDetailDto(
     DateTime? ReturnedAt = null,
     Guid? ReturnedByUserId = null,
     string? ReturnedByUserName = null,
-    string? ReturnedFromDepartmentCode = null);
+    string? ReturnedFromDepartmentCode = null,
+    int HiddenDebtItemsCount = 0);
+
 public record CirculationHistoryDto(
     Guid Id, Guid? FromDepartmentId, string? FromDepartmentName,
     Guid? ToDepartmentId, string? ToDepartmentName,
@@ -139,6 +143,7 @@ public class CreateDebtItemRequest
 {
     public string ItemName { get; set; } = string.Empty;
     public string? Notes { get; set; }
+    public string? TargetDepartmentCode { get; set; } // "PQLN" hoặc "PDV"
 }
 
 public class CreateDebtDocumentRequest

@@ -8,7 +8,7 @@
 {
     var pkhItems = selected.DebtItems.Where(x => (x.SourceDepartmentCode ?? "PKH") == "PKH").ToList();
     var pqlnItems = selected.DebtItems.Where(x => x.SourceDepartmentCode == "PQLN").ToList();
-    var completedItemsCount = selected.DebtItems.Count(x => IsItemFullyCompleted(x, IsDirectPdv));
+    var completedItemsCount = selected.DebtItems.Count(x => IsItemDone(x, IsDirectPdv));
     var totalPct = selected.DebtItems.Count == 0 ? 100 : (int)Math.Round(100.0 * completedItemsCount / selected.DebtItems.Count);
     var activeStepLabels = GetStepLabels(IsDirectPdv);
     var stepIdx = CurrentStepIndex(selected.Status, IsDirectPdv);
@@ -17,28 +17,28 @@
         <div class="vcb-drawer" @onclick:stopPropagation="true">
             <div class="vcb-drawer-header">
                 <button class="vcb-drawer-close" @onclick="CloseAsync">✕</button>
-                <div class="d-flex align-items-center gap-2" style="font-family: monospace; font-size: 12px; opacity: 0.9;">
+                <div class="d-flex align-items-center gap-2" style="font-family: monospace; font-size: 13.5px; opacity: 0.92;">
                     <span>@selected.DocumentNumber</span>
                     @if (!string.IsNullOrWhiteSpace(selected.CustomerCif))
                     {
                         <span>· CIF: @selected.CustomerCif</span>
                     }
                 </div>
-                <h4 class="fw-bold mb-2 mt-1">@selected.CustomerName</h4>
-                <div class="d-flex flex-wrap align-items-center gap-2">
-                    <span class="badge rounded-pill px-3 py-1" style="background: rgba(255,255,255,0.22); font-weight: 600;">
+                <h3 class="fw-bold mb-2 mt-1" style="font-size: 22px;">@selected.CustomerName</h3>
+                <div class="d-flex flex-wrap align-items-center gap-2" style="font-size: 13px;">
+                    <span class="badge rounded-pill px-3 py-1" style="background: rgba(255,255,255,0.22); font-weight: 600; font-size: 13px;">
                         @(selected.CustomerType == "individual" ? "👤 Cá nhân" : "🏢 Công ty")
                     </span>
                     @if (IsDirectPdv)
                     {
-                        <span class="badge rounded-pill px-3 py-1" style="background: rgba(255,255,255,0.25); font-weight: 600;">
+                        <span class="badge rounded-pill px-3 py-1" style="background: rgba(255,255,255,0.25); font-weight: 600; font-size: 13px;">
                             ⚡ Chuyển thẳng PDV
                         </span>
                     }
-                    <span class="badge rounded-pill px-3 py-1" style="background: rgba(255,255,255,0.18); font-weight: 500;">
+                    <span class="badge rounded-pill px-3 py-1" style="background: rgba(255,255,255,0.18); font-weight: 500; font-size: 13px;">
                         @selected.CurrentDepartmentName
                     </span>
-                    <span class="badge rounded-pill bg-white text-success px-3 py-1 fw-semibold">
+                    <span class="badge rounded-pill bg-white text-success px-3 py-1 fw-semibold" style="font-size: 13px;">
                         @StatusLabel(selected.Status)
                     </span>
                 </div>
@@ -71,7 +71,7 @@
                         else
                         {
                             <div class="vcb-surface p-3 border border-primary-subtle rounded-3">
-                                <div class="fw-bold small mb-2 text-primary">Chỉnh sửa thông tin hồ sơ</div>
+                                <div class="fw-bold mb-2 text-primary" style="font-size: 15px;">Chỉnh sửa thông tin hồ sơ</div>
                                 <div class="row g-2 small">
                                     <div class="col-md-6">
                                         <label class="form-label mb-1">Tên khách hàng *</label>
@@ -116,7 +116,7 @@
                                         <input class="form-control form-control-sm" @bind="editDocNotes" />
                                     </div>
                                 </div>
-                                <div class="d-flex gap-2 mt-2">
+                                <div class="d-flex gap-2 mt-3">
                                     <button type="button" class="btn btn-sm btn-primary fw-semibold" disabled="@isSubmitting" @onclick="SaveEditDocInfo">
                                         💾 Lưu thông tin
                                     </button>
@@ -159,7 +159,7 @@
                     }
                 </div>
 
-                <div class="vcb-surface p-3 mb-3 small">
+                <div class="vcb-surface p-3 px-4 mb-3" style="font-size: 14.5px;">
                     <div class="row g-2">
                         <div class="col-md-6">
                             <span class="text-muted">Mã CIF:</span> <b>@(string.IsNullOrWhiteSpace(selected.CustomerCif) ? "—" : selected.CustomerCif)</b>
@@ -189,57 +189,97 @@
                     </div>
                 </div>
 
-                <div class="vcb-surface p-3 mb-3">
+                <div class="vcb-surface p-3 px-4 mb-3">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="fw-bold" style="font-size: 14.5px;">Chứng từ nợ</span>
-                        <span class="small text-muted fw-semibold">
-                            @(selected.DebtItems.Count == 0 ? "Không có" : $"{completedItemsCount}/{selected.DebtItems.Count} đã đủ")
+                        <span class="fw-bold" style="font-size: 16.5px;">Chứng từ nợ</span>
+                        <span class="text-muted fw-semibold" style="font-size: 14px;">
+                            @if (selected.DebtItems.Count == 0 && selected.HiddenDebtItemsCount == 0)
+                            {
+                                <span>Không có</span>
+                            }
+                            else if (selected.DebtItems.Count == 0)
+                            {
+                                <span>@selected.HiddenDebtItemsCount chứng từ đã ẩn</span>
+                            }
+                            else
+                            {
+                                <span>@completedItemsCount/@selected.DebtItems.Count đã đủ</span>
+                            }
                         </span>
                     </div>
-                    <div class="vcb-progress-track w-100 mb-3" style="height: 5px;">
+                    <div class="vcb-progress-track w-100 mb-3" style="height: 6px;">
                         <div class="vcb-progress-fill" style="width: @(totalPct)%;"></div>
                     </div>
+
+                    @if (selected.HiddenDebtItemsCount > 0)
+                    {
+                        <div class="alert alert-secondary py-2 px-3 mb-3 d-flex align-items-center gap-2" style="background: #f1f4f2; border-color: #dce3df; font-size: 14px;">
+                            <span>🔒</span>
+                            <span>Có <b>@selected.HiddenDebtItemsCount</b> chứng từ nợ thuộc phạm vi theo dõi riêng của phòng ban khác (đã ẩn).</span>
+                        </div>
+                    }
 
                     <div class="row g-3">
                         <div class="@(IsDirectPdv ? "col-12" : "col-md-6")">
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="text-uppercase fw-bold text-muted" style="font-size: 11px; letter-spacing: 0.4px;">
+                                <span class="text-uppercase fw-bold text-muted" style="font-size: 12.5px; letter-spacing: 0.4px;">
                                     CHỨNG TỪ PKH
                                 </span>
-                                <span class="small text-muted fw-semibold" style="font-size: 11px;">
-                                    @(IsDirectPdv
-                                        ? pkhItems.Count(x => x.IsSupplemented && x.IsVerifiedByPdv)
-                                        : pkhItems.Count(x => x.IsSupplemented && x.IsVerifiedByPqln))/@pkhItems.Count
+                                <span class="text-muted fw-semibold" style="font-size: 12.5px;">
+                                    @pkhItems.Count(x => IsItemDone(x, IsDirectPdv))/@pkhItems.Count
                                 </span>
                             </div>
 
                             @if (pkhItems.Count == 0)
                             {
-                                <div class="text-muted small py-2">Không có chứng từ nợ PKH</div>
+                                <div class="text-muted py-2" style="font-size: 14px;">Không có chứng từ nợ PKH hiển thị</div>
                             }
                             @foreach (var it in pkhItems)
                             {
-                                var isVerified = IsDirectPdv ? it.IsVerifiedByPdv : it.IsVerifiedByPqln;
-                                var verifiedAt = IsDirectPdv ? it.PdvVerifiedAt : it.PqlnVerifiedAt;
-                                var verifierDept = IsDirectPdv ? "PDV" : "PQLN";
+                                var targetCode = GetItemTargetCode(it, IsDirectPdv);
+                                var isVerified = targetCode == "PDV" ? it.IsVerifiedByPdv : it.IsVerifiedByPqln;
+                                var verifiedAt = targetCode == "PDV" ? it.PdvVerifiedAt : it.PqlnVerifiedAt;
                                 var isRejected = !it.IsSupplemented && !string.IsNullOrWhiteSpace(it.LastRejectReason);
 
                                 <div class="vcb-item-row">
                                     @if (editingItemId == it.Id)
                                     {
-                                        <input class="form-control form-control-sm" @bind="editItemName" />
-                                        <div class="d-flex gap-1">
-                                            <button class="btn btn-sm btn-success py-0" @onclick="() => SaveEditItem(it)">Lưu</button>
-                                            <button class="btn btn-sm btn-secondary py-0" @onclick="CancelEditItem">Hủy</button>
+                                        <div class="w-100 d-flex flex-column gap-2">
+                                            <input class="form-control form-control-sm" @bind="editItemName" />
+                                            <div class="d-flex align-items-center justify-content-between gap-2">
+                                                @if (!IsDirectPdv)
+                                                {
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <span class="text-muted" style="font-size: 13px;">Nợ phòng:</span>
+                                                        <select class="form-select form-select-sm" style="width: 110px;" @bind="editItemTargetDept">
+                                                            <option value="PQLN">PQLN</option>
+                                                            <option value="PDV">PDV</option>
+                                                        </select>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span></span>
+                                                }
+                                                <div class="d-flex gap-1">
+                                                    <button class="btn btn-sm btn-success" @onclick="() => SaveEditItem(it)">Lưu</button>
+                                                    <button class="btn btn-sm btn-secondary" @onclick="CancelEditItem">Hủy</button>
+                                                </div>
+                                            </div>
                                         </div>
                                     }
                                     else
                                     {
                                         <div>
-                                            <div class="small fw-semibold">📄 @it.ItemName</div>
+                                            <div class="fw-semibold" style="font-size: 14.5px;">
+                                                📄 @it.ItemName
+                                                <span class="ms-1 @(targetCode == "PDV" ? "vcb-target-pill-pdv" : "vcb-target-pill-pqln")">
+                                                    Nợ @targetCode
+                                                </span>
+                                            </div>
                                             @if (isRejected)
                                             {
-                                                <div class="text-danger mt-1" style="font-size: 11.5px;">
+                                                <div class="text-danger mt-1" style="font-size: 13px;">
                                                     ↩ Bị từ chối bởi @it.RejectedByDepartmentCode (@(it.RejectedByUserName ?? "—")): <b>@it.LastRejectReason</b>
                                                     @if (it.RejectedAt.HasValue)
                                                     {
@@ -249,15 +289,15 @@
                                             }
                                             @if (it.IsSupplemented)
                                             {
-                                                <div class="text-muted mt-1" style="font-size: 11.5px;">
+                                                <div class="text-muted mt-1" style="font-size: 13px;">
                                                     PKH bổ sung: <b>@(it.SupplementedAt.HasValue ? FormatFullVnTime(it.SupplementedAt.Value) : "—")</b>
                                                     @if (isVerified)
                                                     {
-                                                        <span class="text-success d-block">@verifierDept xác nhận: <b>@(verifiedAt.HasValue ? FormatFullVnTime(verifiedAt.Value) : "—")</b></span>
+                                                        <span class="text-success d-block">@targetCode xác nhận: <b>@(verifiedAt.HasValue ? FormatFullVnTime(verifiedAt.Value) : "—")</b></span>
                                                     }
                                                     else
                                                     {
-                                                        <span class="text-primary d-block"><i>Chờ @verifierDept xác nhận đã nhận</i></span>
+                                                        <span class="text-primary d-block"><i>Chờ @targetCode xác nhận đã nhận</i></span>
                                                     }
                                                 </div>
                                             }
@@ -265,39 +305,39 @@
                                         <div class="d-flex flex-column align-items-end gap-1 flex-shrink-0">
                                             @if (isRejected)
                                             {
-                                                <span class="vcb-status-pill" style="font-size: 11.5px; padding: 2px 10px; background:#fde8e8; color:#b91c1c; border-color:#f8b4b4;">
+                                                <span class="vcb-status-pill" style="font-size: 12.5px; padding: 3px 11px; background:#fde8e8; color:#b91c1c; border-color:#f8b4b4;">
                                                     <span class="dot" style="background:#dc2626;"></span>Bị từ chối
                                                 </span>
                                             }
                                             else if (!it.IsSupplemented)
                                             {
-                                                <span class="vcb-status-pill pill-amber" style="font-size: 11.5px; padding: 2px 10px;">
+                                                <span class="vcb-status-pill pill-amber" style="font-size: 12.5px; padding: 3px 11px;">
                                                     <span class="dot"></span>Chưa bổ sung
                                                 </span>
                                             }
                                             else if (!isVerified)
                                             {
-                                                <span class="vcb-status-pill pill-blue" style="font-size: 11.5px; padding: 2px 10px;">
-                                                    <span class="dot"></span>Chờ @verifierDept XN
+                                                <span class="vcb-status-pill pill-blue" style="font-size: 12.5px; padding: 3px 11px;">
+                                                    <span class="dot"></span>Chờ @targetCode XN
                                                 </span>
                                             }
                                             else
                                             {
-                                                <span class="vcb-status-pill pill-green" style="font-size: 11.5px; padding: 2px 10px;">
+                                                <span class="vcb-status-pill pill-green" style="font-size: 12.5px; padding: 3px 11px;">
                                                     <span class="dot"></span>Đã bổ sung
                                                 </span>
                                             }
                                             @if (CanManagePkhItem && !it.IsSupplemented)
                                             {
                                                 <div class="d-flex gap-1">
-                                                    <button class="btn btn-link btn-sm p-0 text-primary text-decoration-none" style="font-size: 11.5px;" @onclick="() => StartEditItem(it)">Sửa</button>
+                                                    <button class="btn btn-link btn-sm p-0 text-primary text-decoration-none" style="font-size: 13px;" @onclick="() => StartEditItem(it)">Sửa</button>
                                                     <span class="text-muted">·</span>
-                                                    <button class="btn btn-link btn-sm p-0 text-danger text-decoration-none" style="font-size: 11.5px;" @onclick="() => DeleteDebtItem(it.Id)">Xóa</button>
+                                                    <button class="btn btn-link btn-sm p-0 text-danger text-decoration-none" style="font-size: 13px;" @onclick="() => DeleteDebtItem(it.Id)">Xóa</button>
                                                 </div>
                                             }
-                                            @if (it.IsSupplemented && !isVerified && CanVerifyPkhSupplement && rejectingItemId != it.Id)
+                                            @if (it.IsSupplemented && !isVerified && CanRejectItem(it) && rejectingItemId != it.Id)
                                             {
-                                                <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size: 11px;"
+                                                <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size: 12.5px;"
                                                         @onclick="() => StartRejectItem(it.Id)">
                                                     ↩ Từ chối
                                                 </button>
@@ -324,9 +364,17 @@
 
                             @if (CanManagePkhItem)
                             {
-                                <div class="d-flex gap-2 mt-2">
-                                    <input class="form-control form-control-sm rounded-3" @bind="addItemName" placeholder="Tên chứng từ PKH..." />
-                                    <button class="btn btn-sm btn-outline-success rounded-3 fw-semibold flex-shrink-0" @onclick="AddDebtItem">+ Thêm</button>
+                                <div class="input-group input-group-sm mt-2">
+                                    <input class="form-control" @bind="addItemName" placeholder="Tên chứng từ PKH..." />
+                                    @if (!IsDirectPdv)
+                                    {
+                                        <span class="input-group-text bg-light text-muted">Nợ</span>
+                                        <select class="form-select" style="max-width: 95px; font-weight: 600;" @bind="addItemTargetDept">
+                                            <option value="PQLN">PQLN</option>
+                                            <option value="PDV">PDV</option>
+                                        </select>
+                                    }
+                                    <button class="btn btn-outline-success fw-semibold flex-shrink-0" @onclick="AddDebtItem">+ Thêm</button>
                                 </div>
                             }
                         </div>
@@ -335,17 +383,17 @@
                         {
                             <div class="col-md-6">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <span class="text-uppercase fw-bold text-muted" style="font-size: 11px; letter-spacing: 0.4px;">
+                                    <span class="text-uppercase fw-bold text-muted" style="font-size: 12.5px; letter-spacing: 0.4px;">
                                         CHỨNG TỪ PQLN
                                     </span>
-                                    <span class="small text-muted fw-semibold" style="font-size: 11px;">
+                                    <span class="text-muted fw-semibold" style="font-size: 12.5px;">
                                         @pqlnItems.Count(x => x.IsSupplemented && x.IsVerifiedByPdv)/@pqlnItems.Count
                                     </span>
                                 </div>
 
                                 @if (pqlnItems.Count == 0 && !CanManagePqlnItem)
                                 {
-                                    <div class="text-muted small py-2">Không có chứng từ nợ PQLN</div>
+                                    <div class="text-muted py-2" style="font-size: 14px;">Không có chứng từ nợ PQLN hiển thị</div>
                                 }
                                 @foreach (var it in pqlnItems)
                                 {
@@ -356,17 +404,22 @@
                                         {
                                             <input class="form-control form-control-sm" @bind="editItemName" />
                                             <div class="d-flex gap-1">
-                                                <button class="btn btn-sm btn-success py-0" @onclick="() => SaveEditItem(it)">Lưu</button>
-                                                <button class="btn btn-sm btn-secondary py-0" @onclick="CancelEditItem">Hủy</button>
+                                                <button class="btn btn-sm btn-success" @onclick="() => SaveEditItem(it)">Lưu</button>
+                                                <button class="btn btn-sm btn-secondary" @onclick="CancelEditItem">Hủy</button>
                                             </div>
                                         }
                                         else
                                         {
                                             <div>
-                                                <div class="small fw-semibold">📄 @it.ItemName</div>
+                                                <div class="fw-semibold" style="font-size: 14.5px;">
+                                                    📄 @it.ItemName
+                                                    <span class="ms-1 vcb-target-pill-pdv">
+                                                        Nợ PDV
+                                                    </span>
+                                                </div>
                                                 @if (isRejected)
                                                 {
-                                                    <div class="text-danger mt-1" style="font-size: 11.5px;">
+                                                    <div class="text-danger mt-1" style="font-size: 13px;">
                                                         ↩ Bị từ chối bởi @it.RejectedByDepartmentCode (@(it.RejectedByUserName ?? "—")): <b>@it.LastRejectReason</b>
                                                         @if (it.RejectedAt.HasValue)
                                                         {
@@ -376,7 +429,7 @@
                                                 }
                                                 @if (it.IsSupplemented)
                                                 {
-                                                    <div class="text-muted mt-1" style="font-size: 11.5px;">
+                                                    <div class="text-muted mt-1" style="font-size: 13px;">
                                                         PQLN bổ sung: <b>@(it.SupplementedAt.HasValue ? FormatFullVnTime(it.SupplementedAt.Value) : "—")</b>
                                                         @if (it.IsVerifiedByPdv)
                                                         {
@@ -392,39 +445,39 @@
                                             <div class="d-flex flex-column align-items-end gap-1 flex-shrink-0">
                                                 @if (isRejected)
                                                 {
-                                                    <span class="vcb-status-pill" style="font-size: 11.5px; padding: 2px 10px; background:#fde8e8; color:#b91c1c; border-color:#f8b4b4;">
+                                                    <span class="vcb-status-pill" style="font-size: 12.5px; padding: 3px 11px; background:#fde8e8; color:#b91c1c; border-color:#f8b4b4;">
                                                         <span class="dot" style="background:#dc2626;"></span>Bị từ chối
                                                     </span>
                                                 }
                                                 else if (!it.IsSupplemented)
                                                 {
-                                                    <span class="vcb-status-pill pill-amber" style="font-size: 11.5px; padding: 2px 10px;">
+                                                    <span class="vcb-status-pill pill-amber" style="font-size: 12.5px; padding: 3px 11px;">
                                                         <span class="dot"></span>Chưa bổ sung
                                                     </span>
                                                 }
                                                 else if (!it.IsVerifiedByPdv)
                                                 {
-                                                    <span class="vcb-status-pill pill-blue" style="font-size: 11.5px; padding: 2px 10px;">
+                                                    <span class="vcb-status-pill pill-blue" style="font-size: 12.5px; padding: 3px 11px;">
                                                         <span class="dot"></span>Chờ PDV XN
                                                     </span>
                                                 }
                                                 else
                                                 {
-                                                    <span class="vcb-status-pill pill-green" style="font-size: 11.5px; padding: 2px 10px;">
+                                                    <span class="vcb-status-pill pill-green" style="font-size: 12.5px; padding: 3px 11px;">
                                                         <span class="dot"></span>Đã bổ sung
                                                     </span>
                                                 }
                                                 @if (CanManagePqlnItem && !it.IsSupplemented)
                                                 {
                                                     <div class="d-flex gap-1">
-                                                        <button class="btn btn-link btn-sm p-0 text-primary text-decoration-none" style="font-size: 11.5px;" @onclick="() => StartEditItem(it)">Sửa</button>
+                                                        <button class="btn btn-link btn-sm p-0 text-primary text-decoration-none" style="font-size: 13px;" @onclick="() => StartEditItem(it)">Sửa</button>
                                                         <span class="text-muted">·</span>
-                                                        <button class="btn btn-link btn-sm p-0 text-danger text-decoration-none" style="font-size: 11.5px;" @onclick="() => DeleteDebtItem(it.Id)">Xóa</button>
+                                                        <button class="btn btn-link btn-sm p-0 text-danger text-decoration-none" style="font-size: 13px;" @onclick="() => DeleteDebtItem(it.Id)">Xóa</button>
                                                     </div>
                                                 }
-                                                @if (it.IsSupplemented && !it.IsVerifiedByPdv && CanVerifyPqlnSupplement && rejectingItemId != it.Id)
+                                                @if (it.IsSupplemented && !it.IsVerifiedByPdv && CanRejectItem(it) && rejectingItemId != it.Id)
                                                 {
-                                                    <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size: 11px;"
+                                                    <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size: 12.5px;"
                                                             @onclick="() => StartRejectItem(it.Id)">
                                                         ↩ Từ chối
                                                     </button>
@@ -452,7 +505,7 @@
                                 @if (CanManagePqlnItem)
                                 {
                                     <div class="d-flex gap-2 mt-2">
-                                        <input class="form-control form-control-sm rounded-3" @bind="addItemName" placeholder="Tên chứng từ PQLN..." />
+                                        <input class="form-control form-control-sm rounded-3" @bind="addItemName" placeholder="Tên chứng từ PQLN (nợ PDV)..." />
                                         <button class="btn btn-sm btn-outline-success rounded-3 fw-semibold flex-shrink-0" @onclick="AddDebtItem">+ Thêm</button>
                                     </div>
                                 }
@@ -462,16 +515,17 @@
 
                     @if (SupplementableItems.Any())
                     {
-                        <div class="mt-3 p-2 rounded-3 border border-success bg-success-subtle">
-                            <div class="small fw-semibold text-success-emphasis mb-1">Đánh dấu đã bổ sung chứng từ (@Dept):</div>
+                        <div class="mt-3 p-3 rounded-3 border border-success bg-success-subtle">
+                            <div class="small fw-semibold text-success-emphasis mb-2">Đánh dấu đã bổ sung chứng từ (@Dept):</div>
                             <div class="d-flex flex-wrap gap-3">
                                 @foreach (var it in SupplementableItems)
                                 {
+                                    var tCode = GetItemTargetCode(it, IsDirectPdv);
                                     <div class="form-check small">
                                         <input class="form-check-input" type="checkbox"
                                                checked="@suppIds.Contains(it.Id)"
                                                @onchange="(e) => ToggleSupp(it.Id, (bool)(e.Value ?? false))" />
-                                        <label class="form-check-label">@it.ItemName</label>
+                                        <label class="form-check-label">@it.ItemName <span class="text-muted">(Nợ @tCode)</span></label>
                                     </div>
                                 }
                             </div>
@@ -483,9 +537,9 @@
 
                     @if (VerifiablePkhItems.Any())
                     {
-                        <div class="mt-3 p-2 rounded-3 border border-info bg-info-subtle">
-                            <div class="small fw-semibold text-info-emphasis mb-1">
-                                @(IsDirectPdv ? "PDV xác nhận đã nhận chứng từ từ PKH:" : "PQLN xác nhận đã nhận chứng từ từ PKH:")
+                        <div class="mt-3 p-3 rounded-3 border border-info bg-info-subtle">
+                            <div class="small fw-semibold text-info-emphasis mb-2">
+                                @Dept xác nhận đã nhận chứng từ nợ từ PKH:
                             </div>
                             <div class="d-flex flex-wrap gap-3">
                                 @foreach (var it in VerifiablePkhItems)
@@ -506,8 +560,8 @@
 
                     @if (VerifiablePqlnItems.Any())
                     {
-                        <div class="mt-3 p-2 rounded-3 border border-primary bg-primary-subtle">
-                            <div class="small fw-semibold text-primary-emphasis mb-1">PDV xác nhận đã nhận chứng từ từ PQLN:</div>
+                        <div class="mt-3 p-3 rounded-3 border border-primary bg-primary-subtle">
+                            <div class="small fw-semibold text-primary-emphasis mb-2">PDV xác nhận đã nhận chứng từ nợ từ PQLN:</div>
                             <div class="d-flex flex-wrap gap-3">
                                 @foreach (var it in VerifiablePqlnItems)
                                 {
@@ -532,8 +586,8 @@
                         .ToList();
                 }
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="fw-bold" style="font-size: 15px;">Luồng theo dõi</span>
-                    <span class="text-muted" style="font-size: 11.5px;">Mới nhất ở trên</span>
+                    <span class="fw-bold" style="font-size: 16.5px;">Luồng theo dõi</span>
+                    <span class="text-muted" style="font-size: 13px;">Mới nhất ở trên</span>
                 </div>
 
                 <div class="vcb-surface p-3 px-4">
@@ -573,10 +627,10 @@
 
             @if (showReturnPanel && ReturnTargets.Count > 0)
             {
-                <div class="p-3 border-top bg-danger-subtle">
+                <div class="p-3 px-4 border-top bg-danger-subtle">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <span class="fw-bold small text-danger">↩ Trả lại hồ sơ</span>
-                        <button type="button" class="btn-close" style="font-size: 10px;" @onclick="CancelReturnPanel"></button>
+                        <button type="button" class="btn-close" style="font-size: 11px;" @onclick="CancelReturnPanel"></button>
                     </div>
 
                     @if (ReturnTargets.Count > 1)
@@ -610,77 +664,74 @@
             <div class="vcb-drawer-footer">
                 @if (CanResubmitPkh)
                 {
-                    <input class="form-control form-control-sm" @bind="approvalNote" placeholder="Giải trình chỉnh sửa trước khi gửi lại..." />
-                    <button class="vcb-btn-primary px-3 flex-shrink-0" style="height: 38px;" disabled="@isSubmitting" @onclick="ResubmitPkh">
+                    <input class="form-control" @bind="approvalNote" placeholder="Giải trình chỉnh sửa trước khi gửi lại..." />
+                    <button class="vcb-btn-primary px-4 flex-shrink-0" style="height: 40px;" disabled="@isSubmitting" @onclick="ResubmitPkh">
                         📤 Gửi lại SUP PKH →
                     </button>
                 }
                 else if (CanApprovePkh)
                 {
-                    <input class="form-control form-control-sm" @bind="approvalNote" placeholder="Ghi chú duyệt PKH..." />
-                    <button class="vcb-btn-primary px-3 flex-shrink-0" style="height: 38px;" disabled="@isSubmitting" @onclick="ApprovePkh">
+                    <input class="form-control" @bind="approvalNote" placeholder="Ghi chú duyệt PKH..." />
+                    <button class="vcb-btn-primary px-4 flex-shrink-0" style="height: 40px;" disabled="@isSubmitting" @onclick="ApprovePkh">
                         ✓ Duyệt hồ sơ PKH →
                     </button>
                 }
                 else if (CanReceivePqln)
                 {
-                    <span class="small text-muted">Hồ sơ đang chờ phòng PQLN tiếp nhận</span>
-                    <button class="vcb-btn-primary px-3 flex-shrink-0" style="height: 38px;" disabled="@isSubmitting" @onclick="ReceivePqln">
+                    <span class="text-muted">Hồ sơ đang chờ phòng PQLN tiếp nhận</span>
+                    <button class="vcb-btn-primary px-4 flex-shrink-0" style="height: 40px;" disabled="@isSubmitting" @onclick="ReceivePqln">
                         Tiếp nhận hồ sơ PQLN
                     </button>
                 }
                 else if (CanSubmitPqln)
                 {
-                    <input class="form-control form-control-sm" @bind="approvalNote" placeholder="Ghi chú trình SUP PQLN..." />
-                    <button class="vcb-btn-primary px-3 flex-shrink-0" style="height: 38px;" disabled="@isSubmitting" @onclick="SubmitPqln">
+                    <input class="form-control" @bind="approvalNote" placeholder="Ghi chú trình SUP PQLN..." />
+                    <button class="vcb-btn-primary px-4 flex-shrink-0" style="height: 40px;" disabled="@isSubmitting" @onclick="SubmitPqln">
                         ➤ Trình SUP PQLN
                     </button>
                 }
                 else if (CanApprovePqln)
                 {
-                    <input class="form-control form-control-sm" @bind="approvalNote" placeholder="Ghi chú duyệt PQLN..." />
-                    <button class="vcb-btn-primary px-3 flex-shrink-0" style="height: 38px;" disabled="@isSubmitting" @onclick="ApprovePqln">
+                    <input class="form-control" @bind="approvalNote" placeholder="Ghi chú duyệt PQLN..." />
+                    <button class="vcb-btn-primary px-4 flex-shrink-0" style="height: 40px;" disabled="@isSubmitting" @onclick="ApprovePqln">
                         ✓ Duyệt hồ sơ PQLN →
                     </button>
                 }
                 else if (CanReceivePdv)
                 {
-                    <span class="small text-muted">Hồ sơ đang chờ phòng PDV tiếp nhận</span>
-                    <button class="vcb-btn-primary px-3 flex-shrink-0" style="height: 38px;" disabled="@isSubmitting" @onclick="ReceivePdv">
+                    <span class="text-muted">Hồ sơ đang chờ phòng PDV tiếp nhận</span>
+                    <button class="vcb-btn-primary px-4 flex-shrink-0" style="height: 40px;" disabled="@isSubmitting" @onclick="ReceivePdv">
                         Tiếp nhận hồ sơ PDV
                     </button>
                 }
                 else if (CanPostEntry)
                 {
-                    <input class="form-control form-control-sm" @bind="approvalNote" placeholder="Ghi chú đi bút toán..." />
-                    <button class="vcb-btn-primary px-3 flex-shrink-0" style="height: 38px;" disabled="@isSubmitting" @onclick="PostEntry">
+                    <input class="form-control" @bind="approvalNote" placeholder="Ghi chú đi bút toán..." />
+                    <button class="vcb-btn-primary px-4 flex-shrink-0" style="height: 40px;" disabled="@isSubmitting" @onclick="PostEntry">
                         Xác nhận đi bút toán →
                     </button>
                 }
                 else if (CanApprovePdv)
                 {
-                    var unsupCount = selected.DebtItems.Count(x => !IsItemFullyCompleted(x, IsDirectPdv));
-                    var blocked = St == "PdvEntryApproved" && unsupCount > 0;
-                    var btnLabel = St == "PdvEntryPosted"
-                        ? (unsupCount > 0 ? "✓ Duyệt bút toán (Lần 1)" : "✓ Duyệt hoàn tất hồ sơ")
-                        : "✓ Duyệt hoàn tất (Lần 2)";
+                    var unsupCount = selected.DebtItems.Count(x => !IsItemDone(x, IsDirectPdv));
+                    var btnLabel = unsupCount > 0 ? "✓ Duyệt bút toán" : "✓ Duyệt bút toán & hoàn tất";
 
-                    <input class="form-control form-control-sm" @bind="approvalNote" placeholder="Ghi chú duyệt PDV..." />
-                    <button class="vcb-btn-primary px-3 flex-shrink-0" style="height: 38px;" disabled="@(isSubmitting || blocked)" @onclick="ApprovePdv">
+                    <input class="form-control" @bind="approvalNote" placeholder="Ghi chú duyệt bút toán PDV..." />
+                    <button class="vcb-btn-primary px-4 flex-shrink-0" style="height: 40px;" disabled="@isSubmitting" @onclick="ApprovePdv">
                         @btnLabel
                     </button>
                 }
                 else
                 {
-                    <span class="small text-muted">@GetFooterStatusHint(selected)</span>
-                    <button type="button" class="btn btn-sm bg-white border rounded-3 px-3 flex-shrink-0" style="height: 36px;" @onclick="CloseAsync">
+                    <span class="text-muted">@GetFooterStatusHint(selected)</span>
+                    <button type="button" class="btn bg-white border rounded-3 px-4 flex-shrink-0" style="height: 40px;" @onclick="CloseAsync">
                         Đóng
                     </button>
                 }
 
                 @if (ReturnTargets.Count > 0 && !showReturnPanel)
                 {
-                    <button type="button" class="btn btn-sm btn-outline-danger rounded-3 px-3 flex-shrink-0 fw-semibold" style="height: 38px;"
+                    <button type="button" class="btn btn-outline-danger rounded-3 px-3 flex-shrink-0 fw-semibold" style="height: 40px;"
                             disabled="@isSubmitting" @onclick="OpenReturnPanel">
                         ↩ Trả lại
                     </button>
@@ -701,12 +752,14 @@
     string? actionError;
     bool isSubmitting;
     string addItemName = "";
+    string addItemTargetDept = "PQLN";
     string approvalNote = "";
     HashSet<Guid> suppIds = new();
     HashSet<Guid> verifyIds = new();
     HashSet<Guid> verifyPqlnIds = new();
     Guid? editingItemId;
     string editItemName = "";
+    string editItemTargetDept = "PQLN";
 
     // Sửa thông tin hồ sơ
     bool isEditingDocInfo;
@@ -758,8 +811,7 @@
             "PkhPendingSup" or "ReturnedToPkh" => 1,
             "PdvPendingReceive" => 2,
             "PdvReceived" or "PdvEntryPosted" => 3,
-            "PdvEntryApproved" => 4,
-            "Completed" => 5,
+            "PdvEntryApproved" or "Completed" => 5,
             _ => 1
         }
         : status switch
@@ -769,10 +821,26 @@
             "PqlnReceived" or "PqlnPendingSup" or "ReturnedToPqln" => 3,
             "PdvPendingReceive" => 4,
             "PdvReceived" or "PdvEntryPosted" => 5,
-            "PdvEntryApproved" => 6,
-            "Completed" => 7,
+            "PdvEntryApproved" or "Completed" => 7,
             _ => 1
         };
+
+    static string GetItemTargetCode(DebtItemDto x, bool isDirectPdv)
+    {
+        if (!string.IsNullOrWhiteSpace(x.TargetDepartmentCode))
+            return x.TargetDepartmentCode.Trim().ToUpperInvariant();
+        if (isDirectPdv || string.Equals(x.SourceDepartmentCode, "PQLN", StringComparison.OrdinalIgnoreCase))
+            return "PDV";
+        return "PQLN";
+    }
+
+    static bool IsItemDone(DebtItemDto x, bool isDirectPdv)
+    {
+        if (!x.IsSupplemented) return false;
+        return GetItemTargetCode(x, isDirectPdv) == "PDV"
+            ? x.IsVerifiedByPdv
+            : x.IsVerifiedByPqln;
+    }
 
     string Dept => Session.CurrentUser?.DepartmentCode ?? "";
     string St => selected?.Status ?? "";
@@ -786,7 +854,7 @@
     bool CanApprovePqln => selected != null && !IsDirectPdv && Dept == "PQLN" && R("manager") && St == "PqlnPendingSup";
     bool CanReceivePdv => selected != null && Dept == "PDV" && R("staff") && St == "PdvPendingReceive";
     bool CanPostEntry => selected != null && Dept == "PDV" && R("staff") && St == "PdvReceived" && selected.PdvReceiverId == Session.CurrentUser?.Id;
-    bool CanApprovePdv => selected != null && Dept == "PDV" && R("manager") && (St == "PdvEntryPosted" || St == "PdvEntryApproved");
+    bool CanApprovePdv => selected != null && Dept == "PDV" && R("manager") && St == "PdvEntryPosted";
 
     bool CanEditDocumentInfo => selected != null && Session.CurrentUser != null && R("staff")
         && ((Dept == "PKH" && selected.CreatedByUserId == Session.CurrentUser.Id && St is "PkhPendingSup" or "ReturnedToPkh")
@@ -840,30 +908,28 @@
         ? Enumerable.Empty<DebtItemDto>()
         : selected.DebtItems.Where(x => !x.IsSupplemented && (x.SourceDepartmentCode ?? "PKH") == Dept);
 
-    bool CanVerifyPkhSupplement => selected != null
+    bool IsActiveReceiverOfCurrentDept => selected != null
         && Session.CurrentUser != null
         && R("staff")
-        && (IsDirectPdv
-            ? (Dept == "PDV" && selected.PdvReceiverId == Session.CurrentUser.Id)
-            : (Dept == "PQLN" && selected.PqlnReceiverId == Session.CurrentUser.Id));
+        && ((Dept == "PQLN" && selected.PqlnReceiverId == Session.CurrentUser.Id)
+            || (Dept == "PDV" && selected.PdvReceiverId == Session.CurrentUser.Id));
 
-    IEnumerable<DebtItemDto> VerifiablePkhItems => selected == null || !CanVerifyPkhSupplement
+    bool CanRejectItem(DebtItemDto item) => IsActiveReceiverOfCurrentDept
+        && GetItemTargetCode(item, IsDirectPdv) == Dept
+        && !(Dept == "PDV" ? item.IsVerifiedByPdv : item.IsVerifiedByPqln);
+
+    IEnumerable<DebtItemDto> VerifiablePkhItems => selected == null || !IsActiveReceiverOfCurrentDept
         ? Enumerable.Empty<DebtItemDto>()
         : selected.DebtItems.Where(x => (x.SourceDepartmentCode ?? "PKH") == "PKH"
                                      && x.IsSupplemented
-                                     && (IsDirectPdv ? !x.IsVerifiedByPdv : !x.IsVerifiedByPqln));
+                                     && GetItemTargetCode(x, IsDirectPdv) == Dept
+                                     && (Dept == "PDV" ? !x.IsVerifiedByPdv : !x.IsVerifiedByPqln));
 
-    bool CanVerifyPqlnSupplement => selected != null
-        && !IsDirectPdv
-        && Session.CurrentUser != null
-        && R("staff")
-        && Dept == "PDV"
-        && selected.PdvReceiverId == Session.CurrentUser.Id;
-
-    IEnumerable<DebtItemDto> VerifiablePqlnItems => selected == null || !CanVerifyPqlnSupplement
+    IEnumerable<DebtItemDto> VerifiablePqlnItems => selected == null || !IsActiveReceiverOfCurrentDept || Dept != "PDV"
         ? Enumerable.Empty<DebtItemDto>()
         : selected.DebtItems.Where(x => x.SourceDepartmentCode == "PQLN"
                                      && x.IsSupplemented
+                                     && GetItemTargetCode(x, IsDirectPdv) == "PDV"
                                      && !x.IsVerifiedByPdv);
 
     bool CanManagePkhItem => selected != null && Dept == "PKH" && R("staff") && (St is "PkhPendingSup" or "ReturnedToPkh") && selected.CreatedByUserId == Session.CurrentUser?.Id;
@@ -893,6 +959,7 @@
             verifyIds.Clear();
             verifyPqlnIds.Clear();
             approvalNote = "";
+            addItemTargetDept = "PQLN";
             isEditingDocInfo = false;
             CancelEditItem();
             CancelReturnPanel();
@@ -933,7 +1000,7 @@
             : "Đã duyệt PQLN — Đang chờ cán bộ PDV tiếp nhận",
         "PdvReceived" => $"Đang được {d.PdvReceiverName ?? "cán bộ PDV"} thụ lý & đi bút toán",
         "PdvEntryPosted" => "Đã đi bút toán — Đang chờ Lãnh đạo PDV duyệt",
-        "PdvEntryApproved" => "Đã duyệt bút toán — Đang chờ bổ sung & xác nhận đủ chứng từ nợ",
+        "PdvEntryApproved" => "SUP PDV đã duyệt bút toán — Hồ sơ sẽ tự động hoàn tất khi đủ chứng từ nợ",
         "Completed" => "Hồ sơ đã hoàn tất toàn bộ quy trình",
         _ => "Hồ sơ đang ở bước xử lý khác"
     };
@@ -952,7 +1019,7 @@
         if (note.Contains("gửi sup pqln") || note.Contains("trình sup pqln")) return "Trình SUP PQLN";
         if (note.Contains("bút toán") && note.Contains("duyệt")) return "SUP PDV duyệt";
         if (note.Contains("bút toán")) return "Đi bút toán";
-        if (note.Contains("hoàn tất")) return "Duyệt hoàn tất";
+        if (h.Action == "Completed" || note.Contains("hoàn tất")) return "Hoàn tất hồ sơ";
         if (note.Contains("xác nhận") && note.Contains("chứng từ")) return "Xác nhận chứng từ";
         if (note.Contains("bổ sung")) return "Bổ sung";
         if (note.Contains("sửa tên chứng từ") || note.Contains("sửa chứng từ")) return "Sửa chứng từ";
@@ -983,7 +1050,6 @@
             return "Phòng Khách hàng → Phòng Quản lý nợ";
         }
 
-        // Ưu tiên bắt đúng phòng của người thực hiện theo tiền tố ghi chú
         if (note.StartsWith("nv pkh") || note.StartsWith("sup pkh") || note.StartsWith("[nv pkh") || note.StartsWith("[sup pkh") || note.Contains("tại pkh"))
             return "Phòng Khách hàng";
 
@@ -993,7 +1059,6 @@
         if (note.StartsWith("nv pdv") || note.StartsWith("sup pdv") || note.StartsWith("[nv pdv") || note.StartsWith("[sup pdv") || note.Contains("tại pdv"))
             return "Phòng Dịch vụ khách hàng";
 
-        // Bắt theo Action nghiệp vụ của từng phòng
         if (h.Action is "PqlnReceived" or "PqlnSubmittedSup")
             return "Phòng Quản lý nợ";
 
@@ -1143,9 +1208,19 @@
         actionError = null;
         try
         {
+            var targetCode = Dept == "PQLN" ? "PDV" : (IsDirectPdv ? "PDV" : addItemTargetDept);
             await DocService.AddDebtItemsAsync(
                 selected.Id,
-                new AddDebtItemsRequest(new List<CreateDebtItemRequest> { new CreateDebtItemRequest { ItemName = addItemName.Trim() } }, $"Thêm chứng từ nợ tại {Dept}"),
+                new AddDebtItemsRequest(
+                    new List<CreateDebtItemRequest>
+                    {
+                        new CreateDebtItemRequest
+                        {
+                            ItemName = addItemName.Trim(),
+                            TargetDepartmentCode = targetCode
+                        }
+                    },
+                    $"Thêm chứng từ nợ tại {Dept}"),
                 Session.CurrentUser.Id);
             addItemName = "";
             await ReloadSelectedAsync(resetState: true);
@@ -1155,8 +1230,19 @@
         catch (Exception e) { actionError = e.Message; }
     }
 
-    void StartEditItem(DebtItemDto it) { editingItemId = it.Id; editItemName = it.ItemName; }
-    void CancelEditItem() { editingItemId = null; editItemName = ""; }
+    void StartEditItem(DebtItemDto it)
+    {
+        editingItemId = it.Id;
+        editItemName = it.ItemName;
+        editItemTargetDept = GetItemTargetCode(it, IsDirectPdv);
+    }
+
+    void CancelEditItem()
+    {
+        editingItemId = null;
+        editItemName = "";
+        editItemTargetDept = "PQLN";
+    }
 
     async Task SaveEditItem(DebtItemDto it)
     {
@@ -1165,10 +1251,11 @@
         actionError = null;
         try
         {
-            await DocService.UpdateDebtItemAsync(selected.Id, it.Id, new UpdateDebtItemRequest(editItemName.Trim(), it.Notes), Session.CurrentUser.Id);
+            var targetCode = Dept == "PKH" && !IsDirectPdv ? editItemTargetDept : null;
+            await DocService.UpdateDebtItemAsync(selected.Id, it.Id, new UpdateDebtItemRequest(editItemName.Trim(), it.Notes, targetCode), Session.CurrentUser.Id);
             CancelEditItem();
             await ReloadSelectedAsync(resetState: true);
-            actionMessage = "Đã cập nhật tên chứng từ nợ";
+            actionMessage = "Đã cập nhật chứng từ nợ";
         }
         catch (Exception e) { actionError = e.Message; }
     }
@@ -1222,9 +1309,9 @@
             verifyIds.Clear();
             await ReloadSelectedAsync(resetState: true);
             await OnDocumentChanged.InvokeAsync();
-            actionMessage = IsDirectPdv
-                ? "Đã xác nhận nhận chứng từ bổ sung từ PKH (PDV)"
-                : "Đã xác nhận nhận chứng từ bổ sung từ PKH";
+            actionMessage = selected?.Status == "Completed"
+                ? $"Đã xác nhận chứng từ bổ sung từ PKH ({Dept}) — Toàn bộ chứng từ nợ đã đủ, hồ sơ tự động Hoàn tất!"
+                : $"Đã xác nhận nhận chứng từ bổ sung từ PKH ({Dept})";
         }
         catch (Exception e) { actionError = e.Message; }
         finally { isSubmitting = false; }
@@ -1244,7 +1331,9 @@
             verifyPqlnIds.Clear();
             await ReloadSelectedAsync(resetState: true);
             await OnDocumentChanged.InvokeAsync();
-            actionMessage = "Đã xác nhận nhận chứng từ bổ sung từ PQLN";
+            actionMessage = selected?.Status == "Completed"
+                ? "Đã xác nhận chứng từ bổ sung từ PQLN — Toàn bộ chứng từ nợ đã đủ, hồ sơ tự động Hoàn tất!"
+                : "Đã xác nhận nhận chứng từ bổ sung từ PQLN";
         }
         catch (Exception e) { actionError = e.Message; }
         finally { isSubmitting = false; }
@@ -1288,5 +1377,5 @@
     Task ApprovePqln() => Act(async () => { await DocService.PqlnSupApproveAsync(selected!.Id, NoteOr("SUP duyệt hồ sơ"), Session.CurrentUser!.Id); approvalNote = ""; });
     Task ReceivePdv() => Act(() => DocService.PdvTakeOwnershipAsync(selected!.Id, Session.CurrentUser!.Id));
     Task PostEntry() => Act(async () => { await DocService.PdvPostEntryAsync(selected!.Id, NoteOr("Thực hiện đi bút toán"), Session.CurrentUser!.Id); approvalNote = ""; });
-    Task ApprovePdv() => Act(async () => { await DocService.PdvSupApproveAsync(selected!.Id, NoteOr("SUP PDV kiểm tra và duyệt hoàn tất"), Session.CurrentUser!.Id); approvalNote = ""; });
+    Task ApprovePdv() => Act(async () => { await DocService.PdvSupApproveAsync(selected!.Id, NoteOr("SUP PDV kiểm tra và duyệt bút toán"), Session.CurrentUser!.Id); approvalNote = ""; });
 }
