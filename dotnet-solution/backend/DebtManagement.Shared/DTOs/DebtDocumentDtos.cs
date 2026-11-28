@@ -77,7 +77,9 @@ public record DebtDocumentDto(
     DateTime? ReturnedAt = null,
     Guid? ReturnedByUserId = null,
     string? ReturnedByUserName = null,
-    string? ReturnedFromDepartmentCode = null);
+    string? ReturnedFromDepartmentCode = null,
+    string? OriginDepartmentCode = null,
+    string? OriginDepartmentName = null);
 
 public record DebtDocumentDetailDto(
     Guid Id,
@@ -128,7 +130,9 @@ public record DebtDocumentDetailDto(
     Guid? ReturnedByUserId = null,
     string? ReturnedByUserName = null,
     string? ReturnedFromDepartmentCode = null,
-    int HiddenDebtItemsCount = 0);
+    int HiddenDebtItemsCount = 0,
+    string? OriginDepartmentCode = null,
+    string? OriginDepartmentName = null);
 
 public record CirculationHistoryDto(
     Guid Id, Guid? FromDepartmentId, string? FromDepartmentName,

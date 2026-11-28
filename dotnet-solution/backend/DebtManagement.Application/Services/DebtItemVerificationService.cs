@@ -1,3 +1,4 @@
+using DebtManagement.Shared.Constants;
 using DebtManagement.Shared.DTOs;
 using DebtManagement.Application.Interfaces;
 using DebtManagement.Domain.Entities;
@@ -47,20 +48,19 @@ public class DebtItemVerificationService(
         var pqln = await departments.GetByCodeAsync("PQLN");
         var pdv = await departments.GetByCodeAsync("PDV");
 
-        var isStaff = user.Role == "staff";
-        var canAdd = dept?.Code switch
-        {
-            "PKH" => isStaff
-                     && d.Status is DocumentStatus.PkhPendingSup or DocumentStatus.ReturnedToPkh
-                     && d.CreatedByUserId == u,
-
-            "PQLN" => isStaff
-                      && NormalizeWorkflowType(d.WorkflowType) == WorkflowStandard
-                      && d.Status is DocumentStatus.PqlnReceived or DocumentStatus.PqlnPendingSup or DocumentStatus.ReturnedToPqln
-                      && d.PqlnReceiverId == u,
-
-            _ => false
-        };
+        var isStaff = user.Role == WorkflowConstants.RoleStaff;
+        var canAdd = dept != null && (
+            (WorkflowConstants.IsSalesDept(dept.Code)
+             && isStaff
+             && d.Status is DocumentStatus.PkhPendingSup or DocumentStatus.ReturnedToPkh
+             && d.CreatedByUserId == u)
+            ||
+            (dept.Code == WorkflowConstants.DeptPqln
+             && isStaff
+             && NormalizeWorkflowType(d.WorkflowType) == WorkflowStandard
+             && d.Status is DocumentStatus.PqlnReceived or DocumentStatus.PqlnPendingSup or DocumentStatus.ReturnedToPqln
+             && d.PqlnReceiverId == u)
+        );
 
         if (!canAdd || dept == null)
             throw new UnauthorizedAccessException("Bạn không có quyền thêm chứng từ nợ ở trạng thái hiện tại của hồ sơ");
@@ -69,10 +69,10 @@ public class DebtItemVerificationService(
             .Where(x => !string.IsNullOrWhiteSpace(x.ItemName))
             .Select(x =>
             {
-                var targetCode = dept.Code == "PQLN"
-                    ? "PDV"
+                var targetCode = dept.Code == WorkflowConstants.DeptPqln
+                    ? WorkflowConstants.DeptPdv
                     : NormalizeTargetDeptCode(x.TargetDepartmentCode, d.WorkflowType);
-                var targetDeptId = targetCode == "PDV" ? pdv?.Id : pqln?.Id;
+                var targetDeptId = targetCode == WorkflowConstants.DeptPdv ? pdv?.Id : pqln?.Id;
                 return new DebtItem
                 {
                     DebtDocumentId = id,
@@ -116,22 +116,21 @@ public class DebtItemVerificationService(
         if (item.IsSupplemented)
             throw new InvalidOperationException("Không thể sửa hoặc xóa chứng từ nợ đã được bổ sung");
 
-        var isStaff = user.Role == "staff";
-        var allowed = dept?.Code switch
-        {
-            "PKH" => isStaff
-                     && document.Status is DocumentStatus.PkhPendingSup or DocumentStatus.ReturnedToPkh
-                     && document.CreatedByUserId == userId
-                     && (item.SourceDepartmentId == dept.Id || item.SourceDepartmentId == null),
-
-            "PQLN" => isStaff
-                      && NormalizeWorkflowType(document.WorkflowType) == WorkflowStandard
-                      && document.Status is DocumentStatus.PqlnReceived or DocumentStatus.PqlnPendingSup or DocumentStatus.ReturnedToPqln
-                      && document.PqlnReceiverId == userId
-                      && item.SourceDepartmentId == dept.Id,
-
-            _ => false
-        };
+        var isStaff = user.Role == WorkflowConstants.RoleStaff;
+        var allowed = dept != null && (
+            (WorkflowConstants.IsSalesDept(dept.Code)
+             && isStaff
+             && document.Status is DocumentStatus.PkhPendingSup or DocumentStatus.ReturnedToPkh
+             && document.CreatedByUserId == userId
+             && (item.SourceDepartmentId == dept.Id || item.SourceDepartmentId == null || WorkflowConstants.IsSalesDept(item.SourceDepartment?.Code)))
+            ||
+            (dept.Code == WorkflowConstants.DeptPqln
+             && isStaff
+             && NormalizeWorkflowType(document.WorkflowType) == WorkflowStandard
+             && document.Status is DocumentStatus.PqlnReceived or DocumentStatus.PqlnPendingSup or DocumentStatus.ReturnedToPqln
+             && document.PqlnReceiverId == userId
+             && item.SourceDepartmentId == dept.Id)
+        );
 
         if (!allowed || dept == null)
             throw new UnauthorizedAccessException("Bạn không có quyền sửa/xóa chứng từ nợ ở trạng thái hiện tại của hồ sơ");
@@ -154,10 +153,10 @@ public class DebtItemVerificationService(
 
         if (!string.IsNullOrWhiteSpace(request.TargetDepartmentCode))
         {
-            var targetCode = dept.Code == "PQLN"
-                ? "PDV"
+            var targetCode = dept.Code == WorkflowConstants.DeptPqln
+                ? WorkflowConstants.DeptPdv
                 : NormalizeTargetDeptCode(request.TargetDepartmentCode, document.WorkflowType);
-            item.TargetDepartmentId = targetCode == "PDV" ? pdv?.Id : pqln?.Id;
+            item.TargetDepartmentId = targetCode == WorkflowConstants.DeptPdv ? pdv?.Id : pqln?.Id;
         }
 
         await docs.UpdateDebtItemAsync(item);
@@ -188,13 +187,11 @@ public class DebtItemVerificationService(
         var (user, dept) = await GetActorAsync(users, departments, u);
         var d = await docs.GetByIdAsync(id) ?? throw new InvalidOperationException("Hồ sơ không tồn tại");
 
-        var isStaff = user.Role == "staff";
-        var allowed = dept?.Code switch
-        {
-            "PKH" => isStaff && d.CreatedByUserId == u,
-            "PQLN" => isStaff && NormalizeWorkflowType(d.WorkflowType) == WorkflowStandard && d.PqlnReceiverId == u,
-            _ => false
-        };
+        var isStaff = user.Role == WorkflowConstants.RoleStaff;
+        var allowed = dept != null && (
+            (WorkflowConstants.IsSalesDept(dept.Code) && isStaff && d.CreatedByUserId == u)
+            || (dept.Code == WorkflowConstants.DeptPqln && isStaff && NormalizeWorkflowType(d.WorkflowType) == WorkflowStandard && d.PqlnReceiverId == u)
+        );
         if (!allowed || dept == null)
             throw new UnauthorizedAccessException("Bạn chỉ được bổ sung chứng từ của hồ sơ do mình phụ trách");
 
@@ -207,7 +204,7 @@ public class DebtItemVerificationService(
 
         bool BelongsToMyDept(DebtItem item) =>
             item.SourceDepartmentId == dept.Id
-            || (dept.Code == "PKH" && item.SourceDepartmentId == null);
+            || (WorkflowConstants.IsSalesDept(dept.Code) && (item.SourceDepartmentId == null || WorkflowConstants.IsSalesDept(item.SourceDepartment?.Code)));
 
         if (targetItems.Any(x => !BelongsToMyDept(x)))
             throw new UnauthorizedAccessException($"Nhân viên {dept.Code} không được phép bổ sung chứng từ nợ thuộc phòng ban khác");
@@ -257,6 +254,7 @@ public class DebtItemVerificationService(
         var pkh = await departments.GetByCodeAsync("PKH");
         var pqln = await departments.GetByCodeAsync("PQLN");
         var pdv = await departments.GetByCodeAsync("PDV");
+        var docOriginCode = GetOriginDepartmentCode(d);
 
         var requestedIds = (r.ItemIds ?? []).Distinct().ToList();
         if (requestedIds.Count == 0)
@@ -292,7 +290,7 @@ public class DebtItemVerificationService(
             }
             await docs.UpdateDebtItemAsync(x);
             verifiedNames.Add(x.ItemName);
-            sourceDepts.Add(GetSourceDepartmentCode(x, pkh?.Id, pqln?.Id));
+            sourceDepts.Add(GetSourceDepartmentCode(x, pkh?.Id, pqln?.Id, docOriginCode));
         }
 
         if (verifiedNames.Count == 0)
@@ -306,7 +304,6 @@ public class DebtItemVerificationService(
 
         await audit.AddHistoryAsync(id, d.CurrentDepartmentId, d.CurrentDepartmentId, CirculationAction.Supplemented, d.Status, u, note);
 
-        // Nếu SUP PDV đã duyệt bút toán trước đó và toàn bộ chứng từ nợ đã hoàn tất -> Tự động chuyển sang Completed
         await TryAutoCompleteDocumentAsync(d, u, dept.Code, now);
     }
 
@@ -339,6 +336,7 @@ public class DebtItemVerificationService(
         var pkh = await departments.GetByCodeAsync("PKH");
         var pqln = await departments.GetByCodeAsync("PQLN");
         var pdv = await departments.GetByCodeAsync("PDV");
+        var docOriginCode = GetOriginDepartmentCode(d);
 
         var targetCode = GetTargetDepartmentCode(item, d.WorkflowType, pqln?.Id, pdv?.Id);
         var alreadyVerified = dept.Code == "PDV" ? item.IsVerifiedByPdv : item.IsVerifiedByPqln;
@@ -358,7 +356,7 @@ public class DebtItemVerificationService(
 
         await docs.UpdateDebtItemAsync(item);
 
-        var sourceCode = GetSourceDepartmentCode(item, pkh?.Id, pqln?.Id);
+        var sourceCode = GetSourceDepartmentCode(item, pkh?.Id, pqln?.Id, docOriginCode);
         await audit.AddHistoryAsync(
             documentId,
             d.CurrentDepartmentId,

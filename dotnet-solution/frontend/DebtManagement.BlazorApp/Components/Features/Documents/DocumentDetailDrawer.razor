@@ -1,12 +1,13 @@
 @using DebtManagement.Shared.DTOs
 @using DebtManagement.Application.Interfaces
 @using static DebtManagement.BlazorApp.Models.DebtUiHelpers
+@using static DebtManagement.Shared.Constants.WorkflowConstants
 @inject BlazorSession Session
 @inject IDebtDocumentService DocService
 
 @if (selected != null)
 {
-    var pkhItems = selected.DebtItems.Where(x => (x.SourceDepartmentCode ?? "PKH") == "PKH").ToList();
+    var pkhItems = selected.DebtItems.Where(x => IsSalesDept(x.SourceDepartmentCode ?? OriginCode)).ToList();
     var pqlnItems = selected.DebtItems.Where(x => x.SourceDepartmentCode == "PQLN").ToList();
     var completedItemsCount = selected.DebtItems.Count(x => IsItemDone(x, IsDirectPdv));
     var totalPct = selected.DebtItems.Count == 0 ? 100 : (int)Math.Round(100.0 * completedItemsCount / selected.DebtItems.Count);
@@ -101,13 +102,13 @@
                                             <option value="urgent">Khẩn</option>
                                         </select>
                                     </div>
-                                    @if (Dept == "PKH" && St is "PkhPendingSup" or "ReturnedToPkh")
+                                    @if (IsSalesActor && St is "PkhPendingSup" or "ReturnedToPkh")
                                     {
                                         <div class="col-md-6">
                                             <label class="form-label mb-1">Luồng xử lý</label>
                                             <select class="form-select form-select-sm" @bind="editWorkflowType">
-                                                <option value="pkh_pqln_pdv">Chuẩn (PKH → PQLN → PDV)</option>
-                                                <option value="pkh_pdv">Chuyển thẳng (PKH → PDV)</option>
+                                                <option value="pkh_pqln_pdv">Chuẩn (@OriginCode → PQLN → PDV)</option>
+                                                <option value="pkh_pdv">Chuyển thẳng (@OriginCode → PDV)</option>
                                             </select>
                                         </div>
                                     }
@@ -169,13 +170,13 @@
                         </div>
                         <div class="col-md-6">
                             <span class="text-muted">Luồng xử lý:</span>
-                            <b>@(IsDirectPdv ? "Chuyển thẳng PDV (PKH → PDV)" : "Tiêu chuẩn (PKH → PQLN → PDV)")</b>
+                            <b>@(IsDirectPdv ? $"Chuyển thẳng PDV ({OriginCode} → PDV)" : $"Tiêu chuẩn ({OriginCode} → PQLN → PDV)")</b>
                         </div>
                         <div class="col-md-6">
                             <span class="text-muted">Hạn thanh toán:</span> <b class="text-danger">@FormatDate(selected.DueDate)</b>
                         </div>
                         <div class="col-md-6">
-                            <span class="text-muted">PKH khởi tạo:</span> <b>@(selected.CreatedByUserName ?? "—")</b>
+                            <span class="text-muted">Đơn vị khởi tạo:</span> <b>@OriginCode — @(selected.CreatedByUserName ?? "—")</b>
                         </div>
                         @if (!IsDirectPdv)
                         {
@@ -223,7 +224,7 @@
                         <div class="@(IsDirectPdv ? "col-12" : "col-md-6")">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <span class="text-uppercase fw-bold text-muted" style="font-size: 12.5px; letter-spacing: 0.4px;">
-                                    CHỨNG TỪ PKH
+                                    CHỨNG TỪ @OriginCode
                                 </span>
                                 <span class="text-muted fw-semibold" style="font-size: 12.5px;">
                                     @pkhItems.Count(x => IsItemDone(x, IsDirectPdv))/@pkhItems.Count
@@ -232,7 +233,7 @@
 
                             @if (pkhItems.Count == 0)
                             {
-                                <div class="text-muted py-2" style="font-size: 14px;">Không có chứng từ nợ PKH hiển thị</div>
+                                <div class="text-muted py-2" style="font-size: 14px;">Không có chứng từ nợ @OriginCode hiển thị</div>
                             }
                             @foreach (var it in pkhItems)
                             {
@@ -290,7 +291,7 @@
                                             @if (it.IsSupplemented)
                                             {
                                                 <div class="text-muted mt-1" style="font-size: 13px;">
-                                                    PKH bổ sung: <b>@(it.SupplementedAt.HasValue ? FormatFullVnTime(it.SupplementedAt.Value) : "—")</b>
+                                                    @OriginCode bổ sung: <b>@(it.SupplementedAt.HasValue ? FormatFullVnTime(it.SupplementedAt.Value) : "—")</b>
                                                     @if (isVerified)
                                                     {
                                                         <span class="text-success d-block">@targetCode xác nhận: <b>@(verifiedAt.HasValue ? FormatFullVnTime(verifiedAt.Value) : "—")</b></span>
@@ -365,7 +366,7 @@
                             @if (CanManagePkhItem)
                             {
                                 <div class="input-group input-group-sm mt-2">
-                                    <input class="form-control" @bind="addItemName" placeholder="Tên chứng từ PKH..." />
+                                    <input class="form-control" @bind="addItemName" placeholder="Tên chứng từ @OriginCode..." />
                                     @if (!IsDirectPdv)
                                     {
                                         <span class="input-group-text bg-light text-muted">Nợ</span>
@@ -539,7 +540,7 @@
                     {
                         <div class="mt-3 p-3 rounded-3 border border-info bg-info-subtle">
                             <div class="small fw-semibold text-info-emphasis mb-2">
-                                @Dept xác nhận đã nhận chứng từ nợ từ PKH:
+                                @Dept xác nhận đã nhận chứng từ nợ từ @OriginCode:
                             </div>
                             <div class="d-flex flex-wrap gap-3">
                                 @foreach (var it in VerifiablePkhItems)
@@ -553,7 +554,7 @@
                                 }
                             </div>
                             <button class="btn btn-sm btn-primary mt-2 fw-semibold" @onclick="VerifyPkhItems" disabled="@(verifyIds.Count == 0 || isSubmitting)">
-                                ✓ Xác nhận đã nhận từ PKH (@verifyIds.Count)
+                                ✓ Xác nhận đã nhận từ @OriginCode (@verifyIds.Count)
                             </button>
                         </div>
                     }
@@ -666,14 +667,14 @@
                 {
                     <input class="form-control" @bind="approvalNote" placeholder="Giải trình chỉnh sửa trước khi gửi lại..." />
                     <button class="vcb-btn-primary px-4 flex-shrink-0" style="height: 40px;" disabled="@isSubmitting" @onclick="ResubmitPkh">
-                        📤 Gửi lại SUP PKH →
+                        📤 Gửi lại SUP @OriginCode →
                     </button>
                 }
                 else if (CanApprovePkh)
                 {
-                    <input class="form-control" @bind="approvalNote" placeholder="Ghi chú duyệt PKH..." />
+                    <input class="form-control" @bind="approvalNote" placeholder="Ghi chú duyệt @OriginCode..." />
                     <button class="vcb-btn-primary px-4 flex-shrink-0" style="height: 40px;" disabled="@isSubmitting" @onclick="ApprovePkh">
-                        ✓ Duyệt hồ sơ PKH →
+                        ✓ Duyệt hồ sơ @OriginCode →
                     </button>
                 }
                 else if (CanReceivePqln)
@@ -785,7 +786,7 @@
     static readonly string[] StandardStepLabels =
     [
         "Khởi tạo",
-        "SUP PKH duyệt",
+        "SUP duyệt",
         "PQLN đang xử lý",
         "SUP PQLN duyệt",
         "PDV đang xử lý",
@@ -796,7 +797,7 @@
     static readonly string[] DirectPdvStepLabels =
     [
         "Khởi tạo",
-        "SUP PKH duyệt",
+        "SUP duyệt",
         "PDV đang xử lý",
         "SUP PDV duyệt",
         "Hoàn tất"
@@ -843,12 +844,15 @@
     }
 
     string Dept => Session.CurrentUser?.DepartmentCode ?? "";
+    string OriginCode => selected?.OriginDepartmentCode ?? DeptPkh;
+    bool IsSalesActor => IsSalesDept(Dept);
     string St => selected?.Status ?? "";
     bool IsDirectPdv => selected?.WorkflowType == "pkh_pdv";
     bool R(string r) => Session.CurrentUser?.Role == r;
 
-    bool CanResubmitPkh => selected != null && Dept == "PKH" && R("staff") && St == "ReturnedToPkh" && selected.CreatedByUserId == Session.CurrentUser?.Id;
-    bool CanApprovePkh => selected != null && Dept == "PKH" && R("manager") && St == "PkhPendingSup";
+    bool CanResubmitPkh => selected != null && IsSalesActor && R("staff") && St == "ReturnedToPkh" && selected.CreatedByUserId == Session.CurrentUser?.Id;
+    bool CanApprovePkh => selected != null && IsSalesActor && R("manager") && St == "PkhPendingSup"
+                          && string.Equals(OriginCode, Dept, StringComparison.OrdinalIgnoreCase);
     bool CanReceivePqln => selected != null && !IsDirectPdv && Dept == "PQLN" && R("staff") && St == "PqlnPendingReceive";
     bool CanSubmitPqln => selected != null && !IsDirectPdv && Dept == "PQLN" && R("staff") && (St is "PqlnReceived" or "ReturnedToPqln") && selected.PqlnReceiverId == Session.CurrentUser?.Id;
     bool CanApprovePqln => selected != null && !IsDirectPdv && Dept == "PQLN" && R("manager") && St == "PqlnPendingSup";
@@ -857,7 +861,7 @@
     bool CanApprovePdv => selected != null && Dept == "PDV" && R("manager") && St == "PdvEntryPosted";
 
     bool CanEditDocumentInfo => selected != null && Session.CurrentUser != null && R("staff")
-        && ((Dept == "PKH" && selected.CreatedByUserId == Session.CurrentUser.Id && St is "PkhPendingSup" or "ReturnedToPkh")
+        && ((IsSalesActor && selected.CreatedByUserId == Session.CurrentUser.Id && St is "PkhPendingSup" or "ReturnedToPkh")
             || (!IsDirectPdv && Dept == "PQLN" && selected.PqlnReceiverId == Session.CurrentUser.Id && St is "PqlnReceived" or "ReturnedToPqln"));
 
     List<ReturnTargetOption> ReturnTargets
@@ -867,18 +871,21 @@
             var list = new List<ReturnTargetOption>();
             if (selected == null || Session.CurrentUser == null) return list;
 
-            if (Dept == "PKH" && R("manager") && St == "PkhPendingSup")
-                list.Add(new("PKH", "Trả về nhân viên PKH"));
+            if (IsSalesActor && R("manager") && St == "PkhPendingSup"
+                && string.Equals(OriginCode, Dept, StringComparison.OrdinalIgnoreCase))
+            {
+                list.Add(new(Dept, $"Trả về nhân viên {Dept}"));
+            }
 
             if (!IsDirectPdv && Dept == "PQLN")
             {
                 if (R("staff") && (St == "PqlnPendingReceive" || (St is "PqlnReceived" or "ReturnedToPqln" && selected.PqlnReceiverId == Session.CurrentUser.Id)))
-                    list.Add(new("PKH", "Trả về PKH"));
+                    list.Add(new(OriginCode, $"Trả về {OriginCode}"));
 
                 if (R("manager") && St == "PqlnPendingSup")
                 {
                     list.Add(new("PQLN", "Trả về nhân viên PQLN"));
-                    list.Add(new("PKH", "Trả về PKH"));
+                    list.Add(new(OriginCode, $"Trả về {OriginCode}"));
                 }
             }
 
@@ -890,7 +897,7 @@
                 {
                     if (!IsDirectPdv)
                         list.Add(new("PQLN", "Trả về PQLN"));
-                    list.Add(new("PKH", IsDirectPdv ? "Trả về PKH" : "Trả thẳng về PKH"));
+                    list.Add(new(OriginCode, IsDirectPdv ? $"Trả về {OriginCode}" : $"Trả thẳng về {OriginCode}"));
                 }
             }
 
@@ -901,12 +908,15 @@
     bool CanSupplement => selected != null
         && Session.CurrentUser != null
         && R("staff")
-        && ((Dept == "PKH" && selected.CreatedByUserId == Session.CurrentUser.Id)
+        && ((IsSalesActor && selected.CreatedByUserId == Session.CurrentUser.Id)
             || (!IsDirectPdv && Dept == "PQLN" && selected.PqlnReceiverId == Session.CurrentUser.Id));
 
     IEnumerable<DebtItemDto> SupplementableItems => selected == null || !CanSupplement
         ? Enumerable.Empty<DebtItemDto>()
-        : selected.DebtItems.Where(x => !x.IsSupplemented && (x.SourceDepartmentCode ?? "PKH") == Dept);
+        : selected.DebtItems.Where(x => !x.IsSupplemented
+            && (IsSalesActor
+                ? IsSalesDept(x.SourceDepartmentCode ?? OriginCode)
+                : x.SourceDepartmentCode == Dept));
 
     bool IsActiveReceiverOfCurrentDept => selected != null
         && Session.CurrentUser != null
@@ -920,7 +930,7 @@
 
     IEnumerable<DebtItemDto> VerifiablePkhItems => selected == null || !IsActiveReceiverOfCurrentDept
         ? Enumerable.Empty<DebtItemDto>()
-        : selected.DebtItems.Where(x => (x.SourceDepartmentCode ?? "PKH") == "PKH"
+        : selected.DebtItems.Where(x => IsSalesDept(x.SourceDepartmentCode ?? OriginCode)
                                      && x.IsSupplemented
                                      && GetItemTargetCode(x, IsDirectPdv) == Dept
                                      && (Dept == "PDV" ? !x.IsVerifiedByPdv : !x.IsVerifiedByPqln));
@@ -932,7 +942,7 @@
                                      && GetItemTargetCode(x, IsDirectPdv) == "PDV"
                                      && !x.IsVerifiedByPdv);
 
-    bool CanManagePkhItem => selected != null && Dept == "PKH" && R("staff") && (St is "PkhPendingSup" or "ReturnedToPkh") && selected.CreatedByUserId == Session.CurrentUser?.Id;
+    bool CanManagePkhItem => selected != null && IsSalesActor && R("staff") && (St is "PkhPendingSup" or "ReturnedToPkh") && selected.CreatedByUserId == Session.CurrentUser?.Id;
     bool CanManagePqlnItem => selected != null && !IsDirectPdv && Dept == "PQLN" && R("staff") && (St is "PqlnReceived" or "PqlnPendingSup" or "ReturnedToPqln") && selected.PqlnReceiverId == Session.CurrentUser?.Id;
 
     protected override async Task OnParametersSetAsync()
@@ -989,14 +999,14 @@
 
     string GetFooterStatusHint(DebtDocumentDetailDto d) => d.Status switch
     {
-        "PkhPendingSup" => "Đang chờ Lãnh đạo PKH (SUP PKH) phê duyệt",
-        "ReturnedToPkh" => "Hồ sơ đang bị trả về PKH để chỉnh sửa và gửi lại",
-        "PqlnPendingReceive" => "Đã duyệt PKH — Đang chờ cán bộ PQLN tiếp nhận",
+        "PkhPendingSup" => $"Đang chờ Lãnh đạo {OriginCode} (SUP {OriginCode}) phê duyệt",
+        "ReturnedToPkh" => $"Hồ sơ đang bị trả về {OriginCode} để chỉnh sửa và gửi lại",
+        "PqlnPendingReceive" => $"Đã duyệt {OriginCode} — Đang chờ cán bộ PQLN tiếp nhận",
         "PqlnReceived" => $"Đang được {d.PqlnReceiverName ?? "cán bộ PQLN"} thụ lý",
         "ReturnedToPqln" => $"Hồ sơ bị trả về PQLN để {d.PqlnReceiverName ?? "cán bộ PQLN"} xử lý lại",
         "PqlnPendingSup" => "Đang chờ Lãnh đạo PQLN (SUP PQLN) phê duyệt",
         "PdvPendingReceive" => d.WorkflowType == "pkh_pdv"
-            ? "Đã duyệt PKH — Đang chờ cán bộ PDV tiếp nhận"
+            ? $"Đã duyệt {OriginCode} — Đang chờ cán bộ PDV tiếp nhận"
             : "Đã duyệt PQLN — Đang chờ cán bộ PDV tiếp nhận",
         "PdvReceived" => $"Đang được {d.PdvReceiverName ?? "cán bộ PDV"} thụ lý & đi bút toán",
         "PdvEntryPosted" => "Đã đi bút toán — Đang chờ Lãnh đạo PDV duyệt",
@@ -1010,9 +1020,9 @@
         var note = (h.Notes ?? "").ToLower();
         if (note.Contains("từ chối chứng từ")) return "Từ chối chứng từ";
         if (note.Contains("trả lại hồ sơ") || h.Action == "Returned") return "Trả lại hồ sơ";
-        if (note.Contains("gửi lại sup pkh")) return "PKH gửi lại";
+        if (note.Contains("gửi lại sup")) return $"{OriginCode} gửi lại";
         if (note.Contains("khởi tạo")) return "Khởi tạo";
-        if (h.Action == "PkhSupApproved" || note.Contains("sup pkh") || (note.Contains("sup duyệt") && (IsDirectPdv || note.Contains("khách hàng")))) return "SUP PKH duyệt";
+        if (h.Action == "PkhSupApproved" || note.Contains("sup pkh") || note.Contains("sup khdn") || note.Contains("sup khbl") || note.Contains("sup pgd") || (note.Contains("sup duyệt") && (IsDirectPdv || note.Contains("khách hàng")))) return $"SUP {OriginCode} duyệt";
         if (note.Contains("sup duyệt")) return "SUP duyệt";
         if (note.Contains("tiếp nhận") && note.Contains("pqln")) return "PQLN tiếp nhận";
         if (note.Contains("tiếp nhận") && note.Contains("pdv")) return "PDV tiếp nhận";
@@ -1036,22 +1046,26 @@
             return $"{h.FromDepartmentName} → {h.ToDepartmentName}";
         }
 
+        var originDisplayName = selected?.OriginDepartmentName ?? GetDepartmentDisplayName(OriginCode);
         var note = (h.Notes ?? "").Trim().ToLower();
 
-        if (note.Contains("khởi tạo")) return "Phòng Khách hàng";
+        if (note.Contains("khởi tạo")) return originDisplayName;
 
         if (note.Contains("sup duyệt") || h.Action is "PkhSupApproved" or "PqlnSupApproved")
         {
             if (IsDirectPdv || h.Action == "PqlnSupApproved")
                 return h.Action == "PqlnSupApproved"
                     ? "Phòng Quản lý nợ → Phòng Dịch vụ khách hàng"
-                    : "Phòng Khách hàng → Phòng Dịch vụ khách hàng";
+                    : $"{originDisplayName} → Phòng Dịch vụ khách hàng";
 
-            return "Phòng Khách hàng → Phòng Quản lý nợ";
+            return $"{originDisplayName} → Phòng Quản lý nợ";
         }
 
-        if (note.StartsWith("nv pkh") || note.StartsWith("sup pkh") || note.StartsWith("[nv pkh") || note.StartsWith("[sup pkh") || note.Contains("tại pkh"))
-            return "Phòng Khách hàng";
+        if (note.StartsWith("nv pkh") || note.StartsWith("sup pkh") || note.StartsWith("[nv pkh") || note.StartsWith("[sup pkh")
+            || note.StartsWith("nv khdn") || note.StartsWith("sup khdn") || note.StartsWith("[nv khdn") || note.StartsWith("[sup khdn")
+            || note.StartsWith("nv khbl") || note.StartsWith("sup khbl") || note.StartsWith("[nv khbl") || note.StartsWith("[sup khbl")
+            || note.StartsWith("nv pgd_") || note.StartsWith("sup pgd_") || note.StartsWith("[nv pgd_") || note.StartsWith("[sup pgd_"))
+            return originDisplayName;
 
         if (note.StartsWith("nv pqln") || note.StartsWith("sup pqln") || note.StartsWith("[nv pqln") || note.StartsWith("[sup pqln") || note.Contains("tại pqln"))
             return "Phòng Quản lý nợ";
@@ -1067,7 +1081,7 @@
 
         if (note.Contains("pdv") || note.Contains("bút toán")) return "Phòng Dịch vụ khách hàng";
         if (note.Contains("pqln")) return "Phòng Quản lý nợ";
-        if (note.Contains("pkh")) return "Phòng Khách hàng";
+        if (note.Contains("pkh") || note.Contains("khdn") || note.Contains("khbl") || note.Contains("pgd_")) return originDisplayName;
 
         if (selected != null)
         {
@@ -1090,7 +1104,7 @@
             }
         }
 
-        return "Phòng Khách hàng";
+        return originDisplayName;
     }
 
     void StartEditDocInfo()
@@ -1251,7 +1265,7 @@
         actionError = null;
         try
         {
-            var targetCode = Dept == "PKH" && !IsDirectPdv ? editItemTargetDept : null;
+            var targetCode = IsSalesActor && !IsDirectPdv ? editItemTargetDept : null;
             await DocService.UpdateDebtItemAsync(selected.Id, it.Id, new UpdateDebtItemRequest(editItemName.Trim(), it.Notes, targetCode), Session.CurrentUser.Id);
             CancelEditItem();
             await ReloadSelectedAsync(resetState: true);
@@ -1310,8 +1324,8 @@
             await ReloadSelectedAsync(resetState: true);
             await OnDocumentChanged.InvokeAsync();
             actionMessage = selected?.Status == "Completed"
-                ? $"Đã xác nhận chứng từ bổ sung từ PKH ({Dept}) — Toàn bộ chứng từ nợ đã đủ, hồ sơ tự động Hoàn tất!"
-                : $"Đã xác nhận nhận chứng từ bổ sung từ PKH ({Dept})";
+                ? $"Đã xác nhận chứng từ bổ sung từ {OriginCode} ({Dept}) — Toàn bộ chứng từ nợ đã đủ, hồ sơ tự động Hoàn tất!"
+                : $"Đã xác nhận nhận chứng từ bổ sung từ {OriginCode} ({Dept})";
         }
         catch (Exception e) { actionError = e.Message; }
         finally { isSubmitting = false; }
@@ -1367,8 +1381,8 @@
     Task ApprovePkh() => Act(async () =>
     {
         var fallback = IsDirectPdv
-            ? "SUP PKH đã duyệt và chuyển thẳng hồ sơ sang PDV"
-            : "SUP PKH đã duyệt và chuyển hồ sơ sang PQLN";
+            ? $"SUP {OriginCode} đã duyệt và chuyển thẳng hồ sơ sang PDV"
+            : $"SUP {OriginCode} đã duyệt và chuyển hồ sơ sang PQLN";
         await DocService.PkhSupApproveAsync(selected!.Id, NoteOr(fallback), Session.CurrentUser!.Id);
         approvalNote = "";
     });

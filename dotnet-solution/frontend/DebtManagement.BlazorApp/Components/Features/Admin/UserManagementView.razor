@@ -2,6 +2,9 @@
 @using DebtManagement.Application.Interfaces
 @using DebtManagement.BlazorApp.Models
 @using static DebtManagement.BlazorApp.Models.DebtUiHelpers
+@using Microsoft.EntityFrameworkCore
+
+@inject DebtManagement.Infrastructure.Data.AppDbContext Db
 @inject BlazorSession Session
 @inject IUserService UserService
 @inject IJSRuntime JS
@@ -315,9 +318,9 @@
                 <div class="col-6">
                     <label class="form-label fw-semibold mb-1" style="font-size: 13.5px; color: #1f2937;">Phòng ban</label>
                     <select class="form-select vcb-um-input" @bind="userFormDeptId">
-                        @foreach (var dept in AvailableDepartments)
+                        @foreach (var dept in AssignableDepartments)
                         {
-                            <option value="@dept.Id">@dept.Code</option>
+                            <option value="@dept.Id">@dept.Code — @dept.Name</option>
                         }
                     </select>
                 </div>
@@ -379,6 +382,7 @@
 
 @code {
     List<AppUserDto> allUsers = new();
+    List<DeptOption> allDepartments = new();
     bool isSubmitting;
     string userSearch = "";
     string userDeptFilter = "";
@@ -407,11 +411,10 @@
         .Take(userPageSize)
         .ToList();
 
-    List<DeptOption> AvailableDepartments => allUsers
-        .Where(u => u.DepartmentId.HasValue)
-        .GroupBy(u => u.DepartmentId!.Value)
-        .Select(g => new DeptOption(g.Key, g.First().DepartmentName ?? "", g.First().DepartmentCode ?? ""))
-        .OrderBy(d => d.Code)
+    List<DeptOption> AvailableDepartments => allDepartments;
+
+    List<DeptOption> AssignableDepartments => allDepartments
+        .Where(d => !string.Equals(d.Code, "PKH", StringComparison.OrdinalIgnoreCase) || d.Id == userFormDeptId)
         .ToList();
 
     List<AppUserDto> FilteredUsers => allUsers
@@ -432,6 +435,12 @@
 
     protected override async Task OnInitializedAsync()
     {
+        allDepartments = await Db.Departments
+            .AsNoTracking()
+            .OrderBy(d => d.SortOrder)
+            .ThenBy(d => d.Code)
+            .Select(d => new DeptOption(d.Id, d.Name, d.Code))
+            .ToListAsync();
         allUsers = (await UserService.GetAllAsync()).ToList();
     }
 
@@ -462,7 +471,7 @@
         userFormName = "";
         userFormEmail = "";
         userFormPassword = "";
-        userFormDeptId = AvailableDepartments.FirstOrDefault()?.Id ?? Guid.Empty;
+        userFormDeptId = AssignableDepartments.FirstOrDefault()?.Id ?? Guid.Empty;
         userFormRole = "staff";
         userFormIsActive = true;
         userError = null;
@@ -477,7 +486,7 @@
         userFormName = u.Name;
         userFormEmail = u.Email;
         userFormPassword = "";
-        userFormDeptId = u.DepartmentId ?? AvailableDepartments.FirstOrDefault()?.Id ?? Guid.Empty;
+        userFormDeptId = u.DepartmentId ?? AssignableDepartments.FirstOrDefault()?.Id ?? Guid.Empty;
         userFormRole = u.Role;
         userFormIsActive = u.IsActive;
         userError = null;

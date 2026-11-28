@@ -17,7 +17,7 @@
     </div>
 
     <div class="d-flex flex-wrap align-items-center gap-2">
-        @if (!ShowUsers && !ShowSupReport && Session.CurrentUser?.DepartmentCode == DeptPkh && Session.CurrentUser?.Role == RoleStaff)
+        @if (!ShowUsers && !ShowSupReport && IsSalesDept(Session.CurrentUser?.DepartmentCode) && Session.CurrentUser?.Role == RoleStaff)
         {
             <button class="vcb-btn-primary px-3" style="height: 36px; font-size: 13px;"
                     @onclick="() => OnToggleCreateModal.InvokeAsync()">
@@ -87,5 +87,6 @@
     bool CanViewSupReport =>
         Session.CurrentUser?.Role == RoleAdmin
         || (Session.CurrentUser?.Role == RoleManager
-            && Session.CurrentUser?.DepartmentCode is DeptPkh or DeptPqln or DeptPdv);
+            && (IsSalesDept(Session.CurrentUser?.DepartmentCode)
+                || Session.CurrentUser?.DepartmentCode is DeptPqln or DeptPdv));
 }

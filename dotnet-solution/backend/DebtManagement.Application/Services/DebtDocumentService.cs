@@ -1,3 +1,4 @@
+using DebtManagement.Shared.Constants;
 using DebtManagement.Shared.DTOs;
 using DebtManagement.Application.Interfaces;
 using DebtManagement.Domain.Entities;
@@ -40,12 +41,16 @@ public class DebtDocumentService(
         var pqln = await departments.GetByCodeAsync("PQLN");
         var pdv = await departments.GetByCodeAsync("PDV");
 
+        var originDept = GetOriginDepartment(d);
+        var originCode = GetOriginDepartmentCode(d);
+        var originName = originDept?.Name ?? WorkflowConstants.GetDepartmentDisplayName(originCode);
+
         var visibleItems = new List<DebtItem>();
         var hiddenItemNames = new List<string>();
 
         foreach (var x in d.DebtItems)
         {
-            if (CanViewDebtItem(user, dept?.Code, x, d.WorkflowType, pkh?.Id, pqln?.Id, pdv?.Id))
+            if (CanViewDebtItem(user, dept?.Code, x, d.WorkflowType, pkh?.Id, pqln?.Id, pdv?.Id, originCode))
             {
                 visibleItems.Add(x);
             }
@@ -113,7 +118,8 @@ public class DebtDocumentService(
             historyList,
             (await docs.GetEditLogsAsync(id)).Select(Log).ToList(),
             d.ReturnReason, d.ReturnedAt, d.ReturnedByUserId, d.ReturnedByUserName, d.ReturnedFromDepartmentCode,
-            hiddenItemNames.Count);
+            hiddenItemNames.Count,
+            originCode, originName);
     }
 
     private static string? MaskHiddenNotes(string? notes, IReadOnlyList<string> hiddenNames)
@@ -131,9 +137,11 @@ public class DebtDocumentService(
 
     public async Task<DebtDocumentDto> CreateAsync(CreateDebtDocumentRequest r, Guid uid)
     {
-        var (user, _) = await GetActorAsync(users, departments, uid);
-        var pkh = await departments.GetByCodeAsync("PKH")
-            ?? throw new InvalidOperationException("Không tìm thấy phòng ban PKH");
+        var (user, salesDept) = await GetActorAsync(users, departments, uid);
+        if (salesDept == null || !WorkflowConstants.IsSalesDept(salesDept.Code) || user.Role != WorkflowConstants.RoleStaff)
+            throw new UnauthorizedAccessException("Chỉ nhân viên thuộc khối bán hàng (KHDN, KHBL, PGD LLQ, PGD Cửa Đông) mới được khởi tạo hồ sơ.");
+
+        var pkh = await departments.GetByCodeAsync("PKH");
         var pqln = await departments.GetByCodeAsync("PQLN");
         var pdv = await departments.GetByCodeAsync("PDV");
         var nowVn = DateTime.UtcNow.AddHours(7);
@@ -148,7 +156,7 @@ public class DebtDocumentService(
             WorkflowType = workflowType,
             IssueDate = DateOnly.FromDateTime(nowVn),
             DueDate = DateOnly.Parse(r.DueDate),
-            CurrentDepartmentId = pkh.Id,
+            CurrentDepartmentId = salesDept.Id,
             Status = DocumentStatus.PkhPendingSup,
             Priority = Enum.TryParse<DocumentPriority>(r.Priority, true, out var parsedPriority) ? parsedPriority : DocumentPriority.Normal,
             Notes = r.Notes,
@@ -167,7 +175,7 @@ public class DebtDocumentService(
                         DebtDocumentId = d.Id,
                         ItemName = x.ItemName.Trim(),
                         Notes = x.Notes,
-                        SourceDepartmentId = pkh.Id,
+                        SourceDepartmentId = salesDept.Id,
                         TargetDepartmentId = targetDeptId,
                         CreatedByUserId = uid
                     };
@@ -187,13 +195,13 @@ public class DebtDocumentService(
             return $"{x.ItemName} (Nợ {tCode})";
         });
         var createNote = debtItems.Count > 0
-            ? $"Khởi tạo hồ sơ{flowTag} tại phòng Khách hàng (Chứng từ nợ: {string.Join(", ", itemsSummary)}) và gửi SUP PKH"
-            : $"Khởi tạo hồ sơ{flowTag} tại phòng Khách hàng và gửi SUP PKH";
+            ? $"Khởi tạo hồ sơ{flowTag} tại {salesDept.Name} ({salesDept.Code}) (Chứng từ nợ: {string.Join(", ", itemsSummary)}) và gửi SUP {salesDept.Code}"
+            : $"Khởi tạo hồ sơ{flowTag} tại {salesDept.Name} ({salesDept.Code}) và gửi SUP {salesDept.Code}";
 
-        await audit.AddHistoryAsync(d.Id, null, pkh.Id, CirculationAction.Created,
+        await audit.AddHistoryAsync(d.Id, null, salesDept.Id, CirculationAction.Created,
             DocumentStatus.PkhPendingSup, uid, createNote);
 
-        return Map((await docs.GetByIdAsync(d.Id))!, pkh.Id, pqln?.Id, pdv?.Id, user, "PKH");
+        return Map((await docs.GetByIdAsync(d.Id))!, pkh?.Id, pqln?.Id, pdv?.Id, user, salesDept.Code);
     }
 
     public async Task<DebtDocumentDto> UpdateAsync(Guid id, UpdateDebtDocumentRequest r, Guid uid)

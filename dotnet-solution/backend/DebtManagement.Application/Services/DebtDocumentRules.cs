@@ -1,4 +1,5 @@
-﻿using DebtManagement.Shared.DTOs;
+﻿using DebtManagement.Shared.Constants;
+using DebtManagement.Shared.DTOs;
 using DebtManagement.Application.Interfaces;
 using DebtManagement.Domain.Entities;
 
@@ -6,8 +7,8 @@ namespace DebtManagement.Application.Services;
 
 internal static class DebtDocumentRules
 {
-    public const string WorkflowStandard = "pkh_pqln_pdv";
-    public const string WorkflowDirectPdv = "pkh_pdv";
+    public const string WorkflowStandard = WorkflowConstants.WorkflowStandard;
+    public const string WorkflowDirectPdv = WorkflowConstants.WorkflowDirectPdv;
 
     public static async Task<(AppUser User, Department? Dept)> GetActorAsync(
         IUserRepository users,
@@ -22,13 +23,40 @@ internal static class DebtDocumentRules
         return (user, dept);
     }
 
-    public static string GetSourceDepartmentCode(DebtItem x, Guid? pkhDeptId = null, Guid? pqlnDeptId = null)
+    public static Department? GetOriginDepartment(DebtDocument d)
+    {
+        if (d.CreatedByUser?.Department != null && WorkflowConstants.IsSalesDept(d.CreatedByUser.Department.Code))
+            return d.CreatedByUser.Department;
+
+        if (d.CurrentDepartment != null && WorkflowConstants.IsSalesDept(d.CurrentDepartment.Code))
+            return d.CurrentDepartment;
+
+        var itemDept = d.DebtItems
+            .Select(i => i.SourceDepartment)
+            .FirstOrDefault(dept => dept != null && WorkflowConstants.IsSalesDept(dept.Code));
+        if (itemDept != null)
+            return itemDept;
+
+        return d.CreatedByUser?.Department ?? d.CurrentDepartment;
+    }
+
+    public static string GetOriginDepartmentCode(DebtDocument d)
+    {
+        var dept = GetOriginDepartment(d);
+        if (!string.IsNullOrWhiteSpace(dept?.Code) && WorkflowConstants.IsSalesDept(dept.Code))
+            return dept.Code.Trim().ToUpperInvariant();
+        return WorkflowConstants.DeptPkh;
+    }
+
+    public static string GetSourceDepartmentCode(DebtItem x, Guid? pkhDeptId = null, Guid? pqlnDeptId = null, string? fallbackSalesCode = null)
     {
         if (!string.IsNullOrWhiteSpace(x.SourceDepartment?.Code))
             return x.SourceDepartment.Code.Trim().ToUpperInvariant();
         if (pqlnDeptId.HasValue && x.SourceDepartmentId == pqlnDeptId.Value)
-            return "PQLN";
-        return "PKH";
+            return WorkflowConstants.DeptPqln;
+        return !string.IsNullOrWhiteSpace(fallbackSalesCode)
+            ? fallbackSalesCode.Trim().ToUpperInvariant()
+            : WorkflowConstants.DeptPkh;
     }
 
     public static string GetTargetDepartmentCode(DebtItem x, string workflowType, Guid? pqlnDeptId = null, Guid? pdvDeptId = null)
@@ -38,16 +66,15 @@ internal static class DebtDocumentRules
 
         if (x.TargetDepartmentId.HasValue)
         {
-            if (pdvDeptId.HasValue && x.TargetDepartmentId.Value == pdvDeptId.Value) return "PDV";
-            if (pqlnDeptId.HasValue && x.TargetDepartmentId.Value == pqlnDeptId.Value) return "PQLN";
+            if (pdvDeptId.HasValue && x.TargetDepartmentId.Value == pdvDeptId.Value) return WorkflowConstants.DeptPdv;
+            if (pqlnDeptId.HasValue && x.TargetDepartmentId.Value == pqlnDeptId.Value) return WorkflowConstants.DeptPqln;
         }
 
-        // Fallback tương thích dữ liệu cũ chưa có TargetDepartmentId
         if (NormalizeWorkflowType(workflowType) == WorkflowDirectPdv)
-            return "PDV";
+            return WorkflowConstants.DeptPdv;
 
         var srcCode = GetSourceDepartmentCode(x, null, pqlnDeptId);
-        return srcCode == "PQLN" ? "PDV" : "PQLN";
+        return srcCode == WorkflowConstants.DeptPqln ? WorkflowConstants.DeptPdv : WorkflowConstants.DeptPqln;
     }
 
     public static bool CanViewDebtItem(
@@ -57,20 +84,31 @@ internal static class DebtDocumentRules
         string workflowType,
         Guid? pkhDeptId = null,
         Guid? pqlnDeptId = null,
-        Guid? pdvDeptId = null)
+        Guid? pdvDeptId = null,
+        string? docOriginSalesCode = null)
     {
-        if (string.Equals(user.Role, "admin", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(user.Role, WorkflowConstants.RoleAdmin, StringComparison.OrdinalIgnoreCase))
             return true;
 
         if (string.IsNullOrWhiteSpace(viewerDeptCode))
             return false;
 
         var viewer = viewerDeptCode.Trim().ToUpperInvariant();
-        var source = GetSourceDepartmentCode(item, pkhDeptId, pqlnDeptId);
+        var source = GetSourceDepartmentCode(item, pkhDeptId, pqlnDeptId, docOriginSalesCode);
         var target = GetTargetDepartmentCode(item, workflowType, pqlnDeptId, pdvDeptId);
 
-        // Chỉ phòng nợ (Source) và phòng được nợ (Target) mới xem được chứng từ nợ này
-        return viewer == source || viewer == target;
+        if (viewer == source || viewer == target)
+            return true;
+
+        // Tương thích dữ liệu lịch sử gắn mã PKH chung khi cán bộ đã chuyển sang 1 trong 4 phòng bán hàng
+        if (source == WorkflowConstants.DeptPkh
+            && WorkflowConstants.IsSalesDept(viewer)
+            && string.Equals(docOriginSalesCode, viewer, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     public static bool IsItemCompleted(DebtItem x, string workflowType, Guid? pkhDeptId = null, Guid? pqlnDeptId = null, Guid? pdvDeptId = null)
@@ -80,8 +118,8 @@ internal static class DebtDocumentRules
         var targetCode = GetTargetDepartmentCode(x, workflowType, pqlnDeptId, pdvDeptId);
         return targetCode switch
         {
-            "PDV" => x.IsVerifiedByPdv,
-            "PQLN" => x.IsVerifiedByPqln,
+            WorkflowConstants.DeptPdv => x.IsVerifiedByPdv,
+            WorkflowConstants.DeptPqln => x.IsVerifiedByPqln,
             _ => true
         };
     }
@@ -102,25 +140,25 @@ internal static class DebtDocumentRules
     public static string NormalizeTargetDeptCode(string? raw, string workflowType)
     {
         if (NormalizeWorkflowType(workflowType) == WorkflowDirectPdv)
-            return "PDV";
-        return string.Equals(raw?.Trim(), "PDV", StringComparison.OrdinalIgnoreCase)
-            ? "PDV"
-            : "PQLN";
+            return WorkflowConstants.DeptPdv;
+        return string.Equals(raw?.Trim(), WorkflowConstants.DeptPdv, StringComparison.OrdinalIgnoreCase)
+            ? WorkflowConstants.DeptPdv
+            : WorkflowConstants.DeptPqln;
     }
 
     public static bool CanView(AppUser user, Department? dept, DebtDocument d)
     {
-        if (user.Role == "admin") return true;
+        if (user.Role == WorkflowConstants.RoleAdmin) return true;
 
-        var code = dept?.Code;
+        var code = dept?.Code?.Trim().ToUpperInvariant();
         var wf = NormalizeWorkflowType(d.WorkflowType);
 
-        if (code == "PQLN" && wf == WorkflowDirectPdv)
+        if (code == WorkflowConstants.DeptPqln && wf == WorkflowDirectPdv)
             return false;
 
-        if (user.Role == "manager")
+        if (user.Role == WorkflowConstants.RoleManager)
         {
-            if (code == "PQLN")
+            if (code == WorkflowConstants.DeptPqln)
             {
                 return d.CurrentDepartmentId == dept?.Id
                     || d.Status is DocumentStatus.PqlnPendingReceive
@@ -134,7 +172,7 @@ internal static class DebtDocumentRules
                         or DocumentStatus.Completed;
             }
 
-            if (code == "PDV")
+            if (code == WorkflowConstants.DeptPdv)
             {
                 return d.CurrentDepartmentId == dept?.Id
                     || d.Status is DocumentStatus.PdvPendingReceive
@@ -144,24 +182,30 @@ internal static class DebtDocumentRules
                         or DocumentStatus.Completed;
             }
 
-            return true;
+            if (WorkflowConstants.IsSalesDept(code))
+            {
+                var originCode = GetOriginDepartmentCode(d);
+                return string.Equals(originCode, code, StringComparison.OrdinalIgnoreCase);
+            }
+
+            return false;
         }
 
-        if (code == "PKH") return d.CreatedByUserId == user.Id;
-        if (code == "PQLN") return (d.CurrentDepartmentId == dept?.Id && d.Status == DocumentStatus.PqlnPendingReceive) || d.PqlnReceiverId == user.Id;
-        if (code == "PDV") return (d.CurrentDepartmentId == dept?.Id && d.Status == DocumentStatus.PdvPendingReceive) || d.PdvReceiverId == user.Id;
+        if (WorkflowConstants.IsSalesDept(code)) return d.CreatedByUserId == user.Id;
+        if (code == WorkflowConstants.DeptPqln) return (d.CurrentDepartmentId == dept?.Id && d.Status == DocumentStatus.PqlnPendingReceive) || d.PqlnReceiverId == user.Id;
+        if (code == WorkflowConstants.DeptPdv) return (d.CurrentDepartmentId == dept?.Id && d.Status == DocumentStatus.PdvPendingReceive) || d.PdvReceiverId == user.Id;
         return false;
     }
 
     public static bool CanEdit(AppUser user, Department? dept, DebtDocument d)
     {
-        if (user.Role is "admin" or "manager") return false;
+        if (user.Role is WorkflowConstants.RoleAdmin or WorkflowConstants.RoleManager) return false;
         var code = dept?.Code;
-        if (code == "PKH")
+        if (WorkflowConstants.IsSalesDept(code))
             return d.CreatedByUserId == user.Id
                 && d.CurrentDepartmentId == dept!.Id
                 && d.Status is DocumentStatus.PkhPendingSup or DocumentStatus.ReturnedToPkh;
-        if (code == "PQLN" && NormalizeWorkflowType(d.WorkflowType) == WorkflowStandard)
+        if (code == WorkflowConstants.DeptPqln && NormalizeWorkflowType(d.WorkflowType) == WorkflowStandard)
             return d.CurrentDepartmentId == dept?.Id
                 && ((d.Status == DocumentStatus.PqlnPendingReceive)
                     || (d.PqlnReceiverId == user.Id && d.Status is DocumentStatus.PqlnReceived or DocumentStatus.ReturnedToPqln));
@@ -176,9 +220,13 @@ internal static class DebtDocumentRules
         AppUser? viewer = null,
         string? viewerDeptCode = null)
     {
+        var originDept = GetOriginDepartment(d);
+        var originCode = GetOriginDepartmentCode(d);
+        var originName = originDept?.Name ?? WorkflowConstants.GetDepartmentDisplayName(originCode);
+
         var visibleItems = viewer == null
             ? d.DebtItems.ToList()
-            : d.DebtItems.Where(x => CanViewDebtItem(viewer, viewerDeptCode, x, d.WorkflowType, pkhDeptId, pqlnDeptId, pdvDeptId)).ToList();
+            : d.DebtItems.Where(x => CanViewDebtItem(viewer, viewerDeptCode, x, d.WorkflowType, pkhDeptId, pqlnDeptId, pdvDeptId, originCode)).ToList();
 
         return new(
             d.Id, d.DocumentNumber, d.CustomerName, d.CustomerCif,
@@ -195,7 +243,8 @@ internal static class DebtDocumentRules
             visibleItems.Count,
             visibleItems.Count(x => IsItemCompleted(x, d.WorkflowType, pkhDeptId, pqlnDeptId, pdvDeptId)),
             d.CreatedAt, d.UpdatedAt,
-            d.ReturnReason, d.ReturnedAt, d.ReturnedByUserId, d.ReturnedByUserName, d.ReturnedFromDepartmentCode);
+            d.ReturnReason, d.ReturnedAt, d.ReturnedByUserId, d.ReturnedByUserName, d.ReturnedFromDepartmentCode,
+            originCode, originName);
     }
 
     public static DebtItemDto Item(

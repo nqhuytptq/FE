@@ -22,6 +22,14 @@ public static class WorkflowConstants
     public const string DeptPgdLlq = "PGD_LLQ";
     public const string DeptPgdCd = "PGD_CD";
 
+    public static readonly string[] RealSalesDepartmentCodes =
+    [
+        DeptKhdn,
+        DeptKhbl,
+        DeptPgdLlq,
+        DeptPgdCd
+    ];
+
     public static readonly HashSet<string> SalesDepartmentCodes = new(StringComparer.OrdinalIgnoreCase)
     {
         DeptKhdn,
@@ -36,6 +44,19 @@ public static class WorkflowConstants
 
     public static string GetWorkflowGroup(string? deptCode)
         => IsSalesDept(deptCode) ? DeptPkh : (deptCode?.Trim().ToUpperInvariant() ?? "");
+
+    public static string GetDepartmentDisplayName(string? deptCode) => (deptCode?.Trim().ToUpperInvariant()) switch
+    {
+        DeptKhdn => "Khách hàng Doanh nghiệp",
+        DeptKhbl => "Khách hàng Bán lẻ",
+        DeptPgdLlq => "PGD Lạc Long Quân",
+        DeptPgdCd => "PGD Cửa Đông",
+        DeptPkh => "Phòng Khách hàng (Cũ)",
+        DeptPqln => "Phòng Quản lý nợ",
+        DeptPdv => "Phòng Dịch vụ khách hàng",
+        DeptPkt => "Phòng Kế toán",
+        _ => deptCode ?? "—"
+    };
 
     // Vai trò người dùng
     public const string RoleAdmin = "admin";

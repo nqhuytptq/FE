@@ -7,9 +7,9 @@ namespace DebtManagement.Infrastructure.Repositories;
 
 public class DebtDocumentRepository(AppDbContext db) : IDebtDocumentRepository
 {
-    private static IQueryable<DebtDocument> Base(AppDbContext db) => db.DebtDocuments
+private static IQueryable<DebtDocument> Base(AppDbContext db) => db.DebtDocuments
         .Include(d => d.CurrentDepartment)
-        .Include(d => d.CreatedByUser)
+        .Include(d => d.CreatedByUser).ThenInclude(u => u!.Department)
         .Include(d => d.PqlnReceiver)
         .Include(d => d.PdvReceiver)
         .Include(d => d.DebtItems).ThenInclude(i => i.SupplementedByUser)

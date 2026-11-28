@@ -54,6 +54,8 @@ public class KpiRepository(AppDbContext db) : IKpiRepository
 public Task<List<DebtDocument>> GetDocumentsForKpiAsync(DateOnly effectiveFrom)
         => db.DebtDocuments
             .AsNoTracking()
+            .Include(d => d.CreatedByUser)
+                .ThenInclude(u => u!.Department)
             .Include(d => d.DebtItems)
                 .ThenInclude(i => i.SourceDepartment)
             .Include(d => d.DebtItems)

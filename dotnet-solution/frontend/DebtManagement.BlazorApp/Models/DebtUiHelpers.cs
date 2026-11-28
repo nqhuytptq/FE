@@ -69,7 +69,7 @@ public static class DebtUiHelpers
 
     public static string StatusLabel(string s) => s switch
     {
-        StatusNames.PkhPendingSup => "Chờ SUP PKH",
+        StatusNames.PkhPendingSup => "Chờ SUP duyệt",
         StatusNames.PqlnPendingReceive => "Chờ PQLN nhận",
         StatusNames.PqlnReceived => "PQLN tiếp nhận",
         StatusNames.PqlnPendingSup => "Chờ SUP PQLN",
@@ -77,24 +77,28 @@ public static class DebtUiHelpers
         StatusNames.PdvReceived => "PDV tiếp nhận",
         StatusNames.PdvEntryPosted => "Chờ SUP PDV duyệt",
         StatusNames.PdvEntryApproved => "Đã duyệt BT · Chờ CT",
-        StatusNames.ReturnedToPkh => "Trả về PKH",
+        StatusNames.ReturnedToPkh => "Trả về phòng tạo",
         StatusNames.ReturnedToPqln => "Trả về PQLN",
         StatusNames.Completed => "Hoàn tất",
         _ => s
     };
 
-    public static string CurrentHandlerText(DebtDocumentDto d) => d.Status switch
+    public static string CurrentHandlerText(DebtDocumentDto d)
     {
-        StatusNames.PkhPendingSup => $"Chờ SUP PKH ({d.CreatedByUserName})",
-        StatusNames.ReturnedToPkh => $"PKH sửa lại ({d.CreatedByUserName})",
-        StatusNames.PqlnPendingReceive => "PQLN: Chờ tiếp nhận",
-        StatusNames.PqlnReceived or StatusNames.PqlnPendingSup => $"PQLN: {d.PqlnReceiverName ?? "—"}",
-        StatusNames.ReturnedToPqln => $"PQLN xử lý lại ({d.PqlnReceiverName ?? "—"})",
-        StatusNames.PdvPendingReceive => "PDV: Chờ tiếp nhận",
-        StatusNames.PdvReceived or StatusNames.PdvEntryPosted or StatusNames.PdvEntryApproved => $"PDV: {d.PdvReceiverName ?? "—"}",
-        StatusNames.Completed => $"Hoàn tất ({d.PdvReceiverName ?? d.CreatedByUserName})",
-        _ => d.CreatedByUserName ?? "—"
-    };
+        var origin = d.OriginDepartmentCode ?? DeptPkh;
+        return d.Status switch
+        {
+            StatusNames.PkhPendingSup => $"Chờ SUP {origin} ({d.CreatedByUserName})",
+            StatusNames.ReturnedToPkh => $"{origin} sửa lại ({d.CreatedByUserName})",
+            StatusNames.PqlnPendingReceive => "PQLN: Chờ tiếp nhận",
+            StatusNames.PqlnReceived or StatusNames.PqlnPendingSup => $"PQLN: {d.PqlnReceiverName ?? "—"}",
+            StatusNames.ReturnedToPqln => $"PQLN xử lý lại ({d.PqlnReceiverName ?? "—"})",
+            StatusNames.PdvPendingReceive => "PDV: Chờ tiếp nhận",
+            StatusNames.PdvReceived or StatusNames.PdvEntryPosted or StatusNames.PdvEntryApproved => $"PDV: {d.PdvReceiverName ?? "—"}",
+            StatusNames.Completed => $"Hoàn tất ({d.PdvReceiverName ?? d.CreatedByUserName})",
+            _ => d.CreatedByUserName ?? "—"
+        };
+    }
 
     public static string GetItemTargetDeptCode(DebtItemDto x, bool isDirectPdv)
     {
@@ -122,7 +126,12 @@ public static class DebtUiHelpers
 
         if (role == RoleManager)
         {
-            if (deptCode == DeptPkh && d.Status == StatusNames.PkhPendingSup) return "Duyệt PKH";
+            if (IsSalesDept(deptCode)
+                && d.Status == StatusNames.PkhPendingSup
+                && string.Equals(d.OriginDepartmentCode ?? DeptPkh, deptCode, StringComparison.OrdinalIgnoreCase))
+            {
+                return $"Duyệt {deptCode}";
+            }
             if (deptCode == DeptPqln && d.WorkflowType != WorkflowDirectPdv && d.Status == StatusNames.PqlnPendingSup) return "Duyệt PQLN";
             if (deptCode == DeptPdv && d.Status == StatusNames.PdvEntryPosted)
                 return d.TotalDebtItems > d.SupplementedDebtItems ? "Duyệt bút toán" : "Duyệt BT & hoàn tất";
@@ -131,7 +140,7 @@ public static class DebtUiHelpers
 
         if (role == RoleStaff)
         {
-            if (deptCode == DeptPkh && d.CreatedByUserId == userId.Value)
+            if (IsSalesDept(deptCode) && d.CreatedByUserId == userId.Value)
             {
                 if (d.Status == StatusNames.ReturnedToPkh) return "Sửa & gửi lại";
                 if (d.TotalDebtItems > d.SupplementedDebtItems) return "Bổ sung CT";

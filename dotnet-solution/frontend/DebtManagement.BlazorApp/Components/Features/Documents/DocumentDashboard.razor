@@ -1,3 +1,4 @@
+@using static DebtManagement.Shared.Constants.WorkflowConstants
 @using DebtManagement.Shared.DTOs
 @using static DebtManagement.BlazorApp.Models.DebtUiHelpers
 @inject BlazorSession Session
@@ -7,7 +8,7 @@
     <p class="text-muted small mb-0">Theo dõi tiến độ phê duyệt, tiếp nhận và bổ sung chứng từ nợ liên phòng ban.</p>
 </div>
 
-@if (ShowCreateModal && Session.CurrentUser?.DepartmentCode == "PKH" && Session.CurrentUser?.Role == "staff")
+@if (ShowCreateModal && IsSalesDept(Session.CurrentUser?.DepartmentCode) && Session.CurrentUser?.Role == "staff")
 {
     <CreateDocumentCard OnCreated="HandleDocumentCreatedAsync"
                         OnCancel="() => ShowCreateModalChanged.InvokeAsync(false)" />
@@ -73,12 +74,14 @@
                            placeholder="Tìm số VB, CIF, khách hàng..." />
                 </div>
 
-                <select class="form-select form-select-sm rounded-3" style="width: 132px; height: 35px;" @bind="filterDept">
+                <select class="form-select form-select-sm rounded-3" style="width: 150px; height: 35px;" @bind="filterDept">
                     <option value="">Tất cả phòng</option>
-                    <option value="PKH">PKH</option>
+                    <option value="KHDN">KHDN</option>
+                    <option value="KHBL">KHBL</option>
+                    <option value="PGD_LLQ">PGD LLQ</option>
+                    <option value="PGD_CD">PGD Cửa Đông</option>
                     <option value="PQLN">PQLN</option>
                     <option value="PDV">PDV</option>
-                    <option value="PKT">PKT</option>
                 </select>
 
                 <select class="form-select form-select-sm rounded-3" style="width: 162px; height: 35px;"
@@ -475,7 +478,7 @@ else
                                 @CurrentHandlerText(d)
                             </div>
                             <div class="text-muted mt-1" style="font-size: 12px;">
-                                Tạo PKH: @(d.CreatedByUserName ?? "—")
+                                Tạo (@(d.OriginDepartmentCode ?? "PKH")): @(d.CreatedByUserName ?? "—")
                             </div>
                         </td>
 

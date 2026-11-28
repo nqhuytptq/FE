@@ -322,11 +322,18 @@ else
                                         </td>
                                         <td>
                                             <div class="text-muted mb-1" style="font-size: 11px;">Gợi ý: <b>@v.AutoSuggestedDepartmentCode</b></div>
-                                            <select class="form-select form-select-sm" style="width: 110px;" disabled="@isLocked"
+                                            <select class="form-select form-select-sm" style="width: 125px;" disabled="@isLocked"
                                                     @bind="editState.DepartmentCode">
-                                                <option value="PKH">PKH</option>
+                                                <option value="KHDN">KHDN</option>
+                                                <option value="KHBL">KHBL</option>
+                                                <option value="PGD_LLQ">PGD_LLQ</option>
+                                                <option value="PGD_CD">PGD_CD</option>
                                                 <option value="PQLN">PQLN</option>
                                                 <option value="PDV">PDV</option>
+                                                @if (v.FinalDepartmentCode == "PKH")
+                                                {
+                                                    <option value="PKH">PKH (Cũ)</option>
+                                                }
                                             </select>
                                         </td>
                                         <td>

@@ -33,18 +33,19 @@ public class SupReportService : ISupReportService
                 ? (detail.PdvReceiverName ?? "Chờ PDV tiếp nhận")
                 : (detail.PqlnReceiverName ?? "Chờ PQLN tiếp nhận");
 
-            var pkhItems = detail.DebtItems
-                .Where(i => (i.SourceDepartmentCode ?? WorkflowConstants.DeptPkh) == WorkflowConstants.DeptPkh);
+            var salesItems = detail.DebtItems
+                .Where(i => WorkflowConstants.IsSalesDept(i.SourceDepartmentCode ?? detail.OriginDepartmentCode ?? WorkflowConstants.DeptPkh));
 
-            foreach (var item in pkhItems)
+            foreach (var item in salesItems)
             {
+                var srcCode = item.SourceDepartmentCode ?? detail.OriginDepartmentCode ?? WorkflowConstants.DeptPkh;
                 var isVerified = isDirectPdv ? item.IsVerifiedByPdv : item.IsVerifiedByPqln;
                 var verifiedAt = isDirectPdv ? item.PdvVerifiedAt : item.PqlnVerifiedAt;
 
                 var row = BuildOriginatedRow(
                     detail,
                     item,
-                    WorkflowConstants.DeptPkh,
+                    srcCode,
                     detail.CreatedByUserName ?? "—",
                     owedToDept,
                     owedToHandler,
@@ -56,7 +57,9 @@ public class SupReportService : ISupReportService
             }
         }
 
-        return BuildOriginatedReport(WorkflowConstants.DeptPkh, onTime, overdueUnpaid, overduePaid);
+        var reportDept = docs.Select(x => x.OriginDepartmentCode).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x))
+                         ?? WorkflowConstants.DeptPkh;
+        return BuildOriginatedReport(reportDept, onTime, overdueUnpaid, overduePaid);
     }
 
     public async Task<SupPqlnFullReportDto> GetPqlnSupReportAsync(Guid currentUserId)
@@ -82,23 +85,27 @@ public class SupReportService : ISupReportService
 
             if (isStandardWorkflow)
             {
-                var pkhItems = detail.DebtItems
-                    .Where(i => (i.SourceDepartmentCode ?? WorkflowConstants.DeptPkh) == WorkflowConstants.DeptPkh)
+                var salesItems = detail.DebtItems
+                    .Where(i => WorkflowConstants.IsSalesDept(i.SourceDepartmentCode ?? detail.OriginDepartmentCode ?? WorkflowConstants.DeptPkh))
                     .ToList();
 
-                if (pkhItems.Count > 0)
+                if (salesItems.Count > 0)
                 {
-                    var itemRows = pkhItems
-                        .Select(item => BuildOriginatedRow(
-                            detail,
-                            item,
-                            WorkflowConstants.DeptPkh,
-                            detail.CreatedByUserName ?? "—",
-                            WorkflowConstants.DeptPqln,
-                            detail.PqlnReceiverName ?? "Chờ PQLN tiếp nhận",
-                            item.IsVerifiedByPqln,
-                            item.PqlnVerifiedAt,
-                            todayVn))
+                    var itemRows = salesItems
+                        .Select(item =>
+                        {
+                            var srcCode = item.SourceDepartmentCode ?? detail.OriginDepartmentCode ?? WorkflowConstants.DeptPkh;
+                            return BuildOriginatedRow(
+                                detail,
+                                item,
+                                srcCode,
+                                detail.CreatedByUserName ?? "—",
+                                WorkflowConstants.DeptPqln,
+                                detail.PqlnReceiverName ?? "Chờ PQLN tiếp nhận",
+                                item.IsVerifiedByPqln,
+                                item.PqlnVerifiedAt,
+                                todayVn);
+                        })
                         .ToList();
 
                     var paidCount = itemRows.Count(x => x.IsPaid);
@@ -180,7 +187,7 @@ public class SupReportService : ISupReportService
             WorkflowConstants.StatusNames.Completed).ToList();
 
         var summaryRows = new List<PdvDocumentSummaryRow>();
-        var allPkhRows = new List<SupDebtItemReportRow>();
+        var allSalesRows = new List<SupDebtItemReportRow>();
         var allPqlnRows = new List<SupDebtItemReportRow>();
 
         foreach (var d in pdvDocs)
@@ -191,11 +198,12 @@ public class SupReportService : ISupReportService
             var isDirectPdv = detail.WorkflowType == WorkflowConstants.WorkflowDirectPdv;
             var pdvReceiver = detail.PdvReceiverName ?? "Chờ PDV tiếp nhận";
 
-            // 1. Chứng từ nợ của PKH
-            var pkhItemRows = detail.DebtItems
-                .Where(i => (i.SourceDepartmentCode ?? WorkflowConstants.DeptPkh) == WorkflowConstants.DeptPkh)
+            // 1. Chứng từ nợ của Khối bán hàng (KHDN, KHBL, PGD LLQ, PGD Cửa Đông)
+            var salesItemRows = detail.DebtItems
+                .Where(i => WorkflowConstants.IsSalesDept(i.SourceDepartmentCode ?? detail.OriginDepartmentCode ?? WorkflowConstants.DeptPkh))
                 .Select(item =>
                 {
+                    var srcCode = item.SourceDepartmentCode ?? detail.OriginDepartmentCode ?? WorkflowConstants.DeptPkh;
                     var isVerified = isDirectPdv ? item.IsVerifiedByPdv : item.IsVerifiedByPqln;
                     var verifiedAt = isDirectPdv ? item.PdvVerifiedAt : item.PqlnVerifiedAt;
                     var targetDept = isDirectPdv ? WorkflowConstants.DeptPdv : WorkflowConstants.DeptPqln;
@@ -206,7 +214,7 @@ public class SupReportService : ISupReportService
                     return BuildOriginatedRow(
                         detail,
                         item,
-                        WorkflowConstants.DeptPkh,
+                        srcCode,
                         detail.CreatedByUserName ?? "—",
                         targetDept,
                         targetHandler,
@@ -231,14 +239,14 @@ public class SupReportService : ISupReportService
                     todayVn))
                 .ToList();
 
-            allPkhRows.AddRange(pkhItemRows);
+            allSalesRows.AddRange(salesItemRows);
             allPqlnRows.AddRange(pqlnItemRows);
 
-            var pkhPaid = pkhItemRows.Count(x => x.IsPaid);
-            var pkhUnpaid = pkhItemRows.Count - pkhPaid;
+            var salesPaid = salesItemRows.Count(x => x.IsPaid);
+            var salesUnpaid = salesItemRows.Count - salesPaid;
             var pqlnPaid = pqlnItemRows.Count(x => x.IsPaid);
             var pqlnUnpaid = pqlnItemRows.Count - pqlnPaid;
-            var totalUnpaid = pkhUnpaid + pqlnUnpaid;
+            var totalUnpaid = salesUnpaid + pqlnUnpaid;
 
             var isDocOverdue = false;
             var overdueDays = 0;
@@ -247,6 +255,10 @@ public class SupReportService : ISupReportService
                 isDocOverdue = true;
                 overdueDays = todayVn.DayNumber - dueDate.DayNumber;
             }
+
+            var creatorDisplay = !string.IsNullOrWhiteSpace(detail.OriginDepartmentCode)
+                ? $"{detail.CreatedByUserName ?? "—"} ({detail.OriginDepartmentCode})"
+                : (detail.CreatedByUserName ?? "—");
 
             summaryRows.Add(new PdvDocumentSummaryRow(
                 detail.Id,
@@ -259,12 +271,12 @@ public class SupReportService : ISupReportService
                 detail.DueDate,
                 isDocOverdue,
                 overdueDays,
-                detail.CreatedByUserName ?? "—",
+                creatorDisplay,
                 isDirectPdv ? "— (Chuyển thẳng)" : (detail.PqlnReceiverName ?? "—"),
                 pdvReceiver,
-                pkhItemRows.Count,
-                pkhPaid,
-                pkhUnpaid,
+                salesItemRows.Count,
+                salesPaid,
+                salesUnpaid,
                 pqlnItemRows.Count,
                 pqlnPaid,
                 pqlnUnpaid));
@@ -278,7 +290,7 @@ public class SupReportService : ISupReportService
             .ThenBy(x => x.DocumentNumber)
             .ToList();
 
-        var orderedPkh = allPkhRows
+        var orderedSales = allSalesRows
             .OrderBy(x => x.IsPaid)
             .ThenByDescending(x => x.IsOverdue)
             .ThenByDescending(x => x.OverdueDays)
@@ -300,14 +312,14 @@ public class SupReportService : ISupReportService
             orderedSummaries.Count,
             docsWithUnpaid,
             orderedSummaries.Count - docsWithUnpaid,
-            orderedPkh.Count,
-            orderedPkh.Count(x => x.IsPaid),
-            orderedPkh.Count(x => !x.IsPaid),
+            orderedSales.Count,
+            orderedSales.Count(x => x.IsPaid),
+            orderedSales.Count(x => !x.IsPaid),
             orderedPqln.Count,
             orderedPqln.Count(x => x.IsPaid),
             orderedPqln.Count(x => !x.IsPaid),
             orderedSummaries,
-            orderedPkh,
+            orderedSales,
             orderedPqln);
     }
 

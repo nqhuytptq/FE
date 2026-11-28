@@ -13,10 +13,23 @@ public class KpiCalculationService(
 {
     private static readonly (string Code, string Name)[] TrackedDepartments =
     [
-        (WorkflowConstants.DeptPkh, "Phòng Khách hàng"),
+        (WorkflowConstants.DeptKhdn, "Phòng Khách hàng Doanh nghiệp"),
+        (WorkflowConstants.DeptKhbl, "Phòng Khách hàng Bán lẻ"),
+        (WorkflowConstants.DeptPgdLlq, "PGD Lạc Long Quân"),
+        (WorkflowConstants.DeptPgdCd, "PGD Cửa Đông"),
         (WorkflowConstants.DeptPqln, "Phòng Quản lý nợ"),
         (WorkflowConstants.DeptPdv, "Phòng Dịch vụ khách hàng")
     ];
+
+    private static IEnumerable<(string Code, string Name)> GetEffectiveDepartments(IEnumerable<KpiViolationItem> violations)
+    {
+        var list = TrackedDepartments.ToList();
+        if (violations.Any(v => string.Equals(v.FinalDepartmentCode, WorkflowConstants.DeptPkh, StringComparison.OrdinalIgnoreCase)))
+        {
+            list.Add((WorkflowConstants.DeptPkh, "Phòng Khách hàng (Lịch sử)"));
+        }
+        return list;
+    }
 
     private async Task EnsureAdminAsync(Guid userId)
     {
@@ -105,7 +118,6 @@ public class KpiCalculationService(
 
         foreach (var doc in docs)
         {
-            // Mốc tính nợ chứng từ: Từ ngày SUP PDV duyệt bút toán
             if (!doc.SupPdvApprovedEntryAt.HasValue) continue;
             if (doc.DebtItems.Count == 0) continue;
 
@@ -161,15 +173,14 @@ public class KpiCalculationService(
         IReadOnlyDictionary<DateOnly, bool> holidayMap,
         Dictionary<(Guid, Guid?), (string? OverrideDept, bool IsExcluded, string? AdminNote)> preservedOverrides)
     {
-        var sourceCode = GetSourceDepartmentCode(item);
+        var fallbackOrigin = GetOriginDepartmentCode(doc);
+        var sourceCode = GetSourceDepartmentCode(item, null, null, fallbackOrigin);
         var targetCode = GetTargetDepartmentCode(item, doc.WorkflowType);
         var actualCompletedDate = ResolveDebtItemCompletedDate(item, targetCode);
 
-        // Nếu chứng từ nợ đã được xác nhận hoàn tất trước hoặc ngay tại ngày SUP PDV duyệt bút toán -> không nợ
         if (actualCompletedDate.HasValue && actualCompletedDate.Value <= supPdvApproveDate)
             return null;
 
-        // Nếu nợ kéo dài từ tháng trước nhưng đã trả xong trước đầu tháng này -> không tính vào tháng này
         var isCarriedOver = supPdvApproveDate < periodStart;
         if (isCarriedOver && actualCompletedDate.HasValue && actualCompletedDate.Value < periodStart)
             return null;
@@ -185,7 +196,7 @@ public class KpiCalculationService(
         if (delayDays <= 0)
             return null;
 
-        var (pkhDays, pqlnDays, pdvDays) = ComputeStageReferenceDays(doc, item, supPdvApproveDate, evalEnd, holidayMap);
+        var (pkhDays, pqlnDays, pdvDays) = ComputeStageReferenceDays(doc, item, sourceCode, supPdvApproveDate, evalEnd, holidayMap);
 
         var key = (doc.Id, (Guid?)item.Id);
         preservedOverrides.TryGetValue(key, out var prev);
@@ -231,11 +242,11 @@ public class KpiCalculationService(
     private (int PkhDays, int PqlnDays, int PdvDays) ComputeStageReferenceDays(
         DebtDocument doc,
         DebtItem item,
+        string sourceCode,
         DateOnly supPdvApproveDate,
         DateOnly evalEnd,
         IReadOnlyDictionary<DateOnly, bool> holidayMap)
     {
-        var sourceCode = GetSourceDepartmentCode(item);
         var suppDate = item.SupplementedAt.HasValue ? ToVnDate(item.SupplementedAt.Value) : (DateOnly?)null;
 
         var borrowerEnd = suppDate.HasValue && suppDate.Value < evalEnd ? suppDate.Value : evalEnd;
@@ -251,7 +262,7 @@ public class KpiCalculationService(
         }
 
         var targetCode = GetTargetDepartmentCode(item, doc.WorkflowType);
-        var pkhDays = sourceCode == "PKH" ? borrowerDebtDays : 0;
+        var pkhDays = WorkflowConstants.IsSalesDept(sourceCode) ? borrowerDebtDays : 0;
         var pqlnDays = sourceCode == "PQLN" ? borrowerDebtDays : (targetCode == "PQLN" ? verifierWaitDays : 0);
         var pdvDays = targetCode == "PDV" ? verifierWaitDays : 0;
 
@@ -323,7 +334,8 @@ public class KpiCalculationService(
             .Select(p => new KpiMonthSummaryDto(p.Year, p.Month, p.Status, p.WorkingDaysInMonth, ComputeDepartmentScores(p, cfg)))
             .ToList();
 
-        var cumulative = TrackedDepartments.Select(dept =>
+        var allViolations = periods.SelectMany(p => p.Violations);
+        var cumulative = GetEffectiveDepartments(allViolations).Select(dept =>
         {
             var deptMonths = monthlyBreakdown
                 .SelectMany(m => m.DepartmentScores)
@@ -387,7 +399,7 @@ public class KpiCalculationService(
             {
                 var penalty = v.IsExcluded ? 0m : CalculateSingleItemDelayPenalty(v.DelayWorkingDays, cfg);
                 var borrowerDays = v.AutoSuggestedDepartmentCode == "PQLN" ? v.PqlnDays : v.PkhDays;
-                var verifyWaitDays = v.PdvDays > 0 ? v.PdvDays : (v.AutoSuggestedDepartmentCode == "PKH" ? v.PqlnDays : 0);
+                var verifyWaitDays = v.PdvDays > 0 ? v.PdvDays : (WorkflowConstants.IsSalesDept(v.AutoSuggestedDepartmentCode) ? v.PqlnDays : 0);
 
                 detailRows.Add(
                 [
@@ -443,7 +455,7 @@ public class KpiCalculationService(
     {
         var active = p.Violations.Where(v => !v.IsExcluded).ToList();
 
-        return TrackedDepartments.Select(dept =>
+        return GetEffectiveDepartments(p.Violations).Select(dept =>
         {
             var deptItems = active.Where(v => v.FinalDepartmentCode == dept.Code).ToList();
 
